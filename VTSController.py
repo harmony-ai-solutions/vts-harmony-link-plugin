@@ -1,25 +1,33 @@
 import asyncio
+import uuid
+
 import websockets
 from json import dumps, loads
 
 from dotenv import load_dotenv, set_key
 from os import getenv
 
+
 class VTSController:
-    def __init__(self,port:int=8001, pluginName:str='AI-Waifu-test', pluginDeveloper:str='JarikDem-Bot') -> None:
+    def __init__(
+        self,
+        port: int = 8001,
+        plugin_name: str = 'Harmony-Link-Plugin',
+        plugin_developer: str = 'HarmonyAI-Solutions'
+    ) -> None:
         self.base_info = {
-            'pluginName': pluginName,
-            'pluginDeveloper': pluginDeveloper
+            'pluginName': plugin_name,
+            'pluginDeveloper': plugin_developer
         }
         self.port = port
         self.vts_token = None
         self.websocket = None
 
-    async def send_request(self, message_type:str='APIStateRequest', data:dict=None) -> dict:
+    async def send_request(self, message_type: str = 'APIStateRequest', data: dict = None) -> dict:
         request = {
             "apiName": "VTubeStudioPublicAPI",
             "apiVersion": "1.0",
-            "requestID": "MyIDWithLessThan64Characters",
+            "requestID": uuid.uuid4().hex,
             "messageType": message_type,
             "data": data
         }
@@ -31,14 +39,16 @@ class VTSController:
         self.update_dotenv()
 
         if not self.vts_token:
-            print("inside if")
+            print("VTS Token not set, requesting new token...")
             res = await self.send_request(message_type='AuthenticationTokenRequest', data=self.base_info)
             if res['messageType'] == 'APIError':
                 raise Exception(f"Error occured:\n\t{res['data']['message']}")
             self.__update_token(res['data']['authenticationToken'])
+            print("VTS Token updated")
             return
-        
-        res = await self.send_request(message_type='AuthenticationRequest', data={**self.base_info, 'authenticationToken': self.vts_token})
+
+        res = await self.send_request(message_type='AuthenticationRequest',
+                                      data={**self.base_info, 'authenticationToken': self.vts_token})
         if not res['data']['authenticated']:
             raise ConnectionError(f"Couldn't connect to the API: {res['data']['reason']}")
 
@@ -48,11 +58,11 @@ class VTSController:
         self.websocket = await websockets.connect(f"ws://localhost:{self.port}")
 
         res = await self.send_request(message_type='APIStateRequest')
-        
+
         if not res['data']['currentSessionAuthenticated']:
             await self.authentication()
 
-    async def inject_params(self, parameters:list) -> None:
+    async def inject_params(self, parameters: list) -> None:
         data = {
             "faceFound": False,
             "mode": "set",
@@ -65,12 +75,10 @@ class VTSController:
         load_dotenv(override=True)
         self.vts_token = getenv("VTS_TOKEN")
 
-    def __update_token(self,token:str) -> None:
+    def __update_token(self, token: str) -> None:
         self.vts_token = token
         set_key('.env', 'VTS_TOKEN', token)
-        
 
-    
 
 async def main():
     vtsc = VTSController()
@@ -80,6 +88,7 @@ async def main():
         await asyncio.sleep(1)
         await vtsc.inject_params([['MouthOpen', 1.0]])
         await asyncio.sleep(1)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
