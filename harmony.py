@@ -5,15 +5,17 @@
 #
 # For more Info on the project goals, see README.md
 #
-
+import asyncio
 import configparser
+import logging
 import os
-import time
 import threading
+import time
 
 import harmony_globals
-
-from harmony_modules import connector, common, text_to_speech, speech_to_text, perception # , countenance, controls, movement
+from VTSController import VTSController
+from harmony_modules import connector, common, text_to_speech, speech_to_text, \
+    perception  # , countenance, controls, movement
 from harmony_modules.common import EVENT_TYPE_INIT_ENTITY
 
 # Config
@@ -26,12 +28,11 @@ _syncLock = threading.Lock()
 class EntityInitHandler(common.HarmonyClientModuleBase):
     global _syncLock
 
-    def __init__(self, entity_controller, entity_id, game):
+    def __init__(self, entity_controller, entity_id):
         # execute the base constructor
         common.HarmonyClientModuleBase.__init__(self, entity_controller=entity_controller)
         # Set config
         self.entity_id = entity_id
-        self.game = game
 
     def handle_event(
             self,
@@ -54,39 +55,31 @@ class EntityInitHandler(common.HarmonyClientModuleBase):
             self.deactivate()
 
     def check_init_done(self):
-        print("Ready entities: {}".format(len(harmony_globals.ready_entities)))
-        print("Failed entities: {}".format(len(harmony_globals.failed_entities)))
-        print("Active entities: {}".format(len(harmony_globals.active_entities)))
+        logging.debug("Ready entities: {}".format(len(harmony_globals.ready_entities)))
+        logging.debug("Failed entities: {}".format(len(harmony_globals.failed_entities)))
+        logging.debug("Active entities: {}".format(len(harmony_globals.active_entities)))
 
         if len(harmony_globals.ready_entities) + len(harmony_globals.failed_entities) == len(harmony_globals.active_entities):
             if len(harmony_globals.failed_entities) == 0:
-                # Load Game Scene - this is a bit weird, however seems to work if copy+paste from koifighter
-                scene_config = self.game.scenedata.scene_config
-                if scene_config["scene"] is not None:
-                    self.game.load_scene(scene_config["scene"])
-                    self.game.set_timer(0.5, _load_scene_start)
-                else:
-                    real_start(self.game)
+                # Entity Initialization done - start VTS routines
+                asyncio.create_task(post_init())
             else:
-                _error_abort(self.game, 'Harmony Link: Entity Initialization failed.')
+                _error_abort('Harmony Link: Entity Initialization failed.')
 
 
 # Chara - Internal representation for a chara actor
 class Chara:
-    def __init__(self, actor):
-        self.actor = actor
-        # Internal Handlers
-        self.current_base_expression = None
+    def __init__(self, controller : VTSController):
+        self.controller = controller
 
 
-class EntityController:  # TODO: Refactor this to use inheritance from base class with ActorEntity
+class EntityController:
 
-    def __init__(self, entity_id, game, config):
+    def __init__(self, entity_id, config):
         # Flow Control
         self.is_active = False
         # Important reference
         self.entity_id = entity_id
-        self.game = game
         self.config = config
         self.chara = None
         # Mandatory Modules
@@ -106,7 +99,7 @@ class EntityController:  # TODO: Refactor this to use inheritance from base clas
             return
 
         # Set active
-        print('Starting ActorEntityController for entity \'{0}\'...'.format(self.entity_id))
+        logging.debug('Starting ActorEntityController for entity \'{0}\'...'.format(self.entity_id))
         self.is_active = True
 
         # Initialize Character on Harmony Link
@@ -120,7 +113,7 @@ class EntityController:  # TODO: Refactor this to use inheritance from base clas
         )
         init_send_success = self.connector.send_event(init_event)
         if init_send_success:
-            print('Harmony Link: Initializing entity \'{0}\'...'.format(self.entity_id))
+            logging.debug('Harmony Link: Initializing entity \'{0}\'...'.format(self.entity_id))
         else:
             raise RuntimeError('Harmony Link: Failed to sent entity initialize Event for entity \'{0}\'.'.format(self.entity_id))
 
@@ -133,8 +126,7 @@ class EntityController:  # TODO: Refactor this to use inheritance from base clas
         # Init comms module for interfacing with external helper binaries
         self.connector = connector.ConnectorEventHandler(
             ws_endpoint=self.config.get('Connector', 'ws_endpoint'),
-            shutdown_func=shutdown,  # -> An Error with a single character should cause the whole plugin to shut down.
-            game=self.game
+            shutdown_func=shutdown,  # -> A hard error with a single entity should cause the whole plugin to shut down.
         )
         self.connector.start()
 
@@ -150,8 +142,6 @@ class EntityController:  # TODO: Refactor this to use inheritance from base clas
             entity_controller=self,
             stt_config=dict(self.config.items('STT'))
         )
-
-        # TODO: Init Module for Roleplay Options by the player -> Just very simple, no lewd stuff
 
         # Init Module for AI Expression Handling
         # self.countenanceModule = countenance.CountenanceHandler(
@@ -195,7 +185,6 @@ class EntityController:  # TODO: Refactor this to use inheritance from base clas
         self.initHandler = EntityInitHandler(
             entity_controller=self,
             entity_id=self.entity_id,
-            game=self.game
         )
         self.initHandler.activate()
 
@@ -222,30 +211,28 @@ class EntityController:  # TODO: Refactor this to use inheritance from base clas
 def start_harmony_ai():
     global _config
 
-    # Actual Plugin Initialization
-    print("Initializing VTS-Plugin for Harmony Link")
-
     # Read Config data from .ini file
     _config = load_config()
 
-    # Setup logging
+    # Actual Plugin Initialization
+    logging.info("Initializing VTS-Plugin for Harmony Link")
 
     # Scene Config - contains references for characters and objects
     scene_config = dict(_config.items('Scene'))
 
     # Determine user entities to be controlled
     if "user_entity_id" not in scene_config or len(scene_config["user_entity_id"]) == 0:
-        _error_abort(game, 'Harmony Plugin: User entity id is invalid.')
+        _error_abort('Harmony Plugin: User entity id is invalid.')
         return
 
     # Determine character entities to be controlled
     if "character_entity_id" not in scene_config or len(scene_config["character_entity_id"]) == 0:
-        _error_abort(game, 'Harmony Plugin: Character entity id/list is invalid.')
+        _error_abort('Harmony Plugin: Character entity id/list is invalid.')
         return
 
     # Setup user entity
     user_entity_id = scene_config["user_entity_id"].strip()
-    controller = EntityController(entity_id=user_entity_id, game=game, config=_config)
+    controller = EntityController(entity_id=user_entity_id, config=_config)
     # Initialize Client modules
     controller.init_modules()
     # Create Startup Init handler
@@ -259,7 +246,7 @@ def start_harmony_ai():
     for entity_id in character_list:
         # Create entity controller for characters
         entity_id = entity_id.strip()
-        controller = EntityController(entity_id=entity_id, game=game, config=_config)
+        controller = EntityController(entity_id=entity_id, config=_config)
         # Initialize Client modules
         controller.init_modules()
         # Create Startup Init handler
@@ -276,59 +263,38 @@ def start_harmony_ai():
         try:
             controller.activate()
         except RuntimeError as e:
-            _error_abort(game, e.message)
+            _error_abort(f"Initialization on Harmony Link failed for entity '{entity_id}': {e}")
             return
 
 
-def _load_scene_start(game):
-    game.set_timer(1.0, _load_scene_start2)
-
-
-def _load_scene_start2(game):
-    real_start(game)
-
-
-def real_start(game):
+async def post_init():
     global _config
 
-    game.scenedata.scene_config = dict(_config.items('Scene'))
-    game.scenef_register_actorsprops()
+    # Get VTS Config for setting up entity controller
+    vts_config = dict(_config.items('VTS'))
 
-    # Setup object props if they are defined
-    props_list = game.scenef_get_all_props()
-    for prop_id in props_list:
-        prop_object = game.scenef_get_prop(prop_id)
-        if prop_object is None:
-            _error_abort(game, 'Harmony Link: Object for Prop "{0}" could not be loaded.'.format(prop_id))
-            return
-        # Add to list of object props
-        harmony_globals.registered_props[prop_id] = prop_object
-
-    # Link Props & Entities within game object
-    game.scenedata.registered_props = harmony_globals.registered_props
-    game.scenedata.active_entities = harmony_globals.active_entities
-    game.scenedata.user_controlled_entity_id = harmony_globals.user_controlled_entity_id
-
-    # Link Chara Actor in scene with Character controller
+    # Link VTS Controller with Entity controller
     for entity_id, controller in harmony_globals.active_entities.items():
-        # Get list of character and user entities
-        character_list = game.scenedata.scene_config["character_entity_id"].split(",")
-
-        # Try to find actor for entity
-        chara_actor = game.scenef_get_actor(entity_id)
-        if chara_actor is None and entity_id in character_list:
-            _error_abort(game, 'Harmony Link: Chara Actor for Entity "{0}" could not be loaded.'.format(entity_id))
-            return
-        elif chara_actor is not None:
-            chara = Chara(actor=chara_actor)
-            chara.actor.set_mouth_open(0)
-            # Update all controller modules with new chara actor
-            controller.update_chara(chara)
 
         # Initialize controls module and STT module if it's the user entity
         if entity_id == harmony_globals.user_controlled_entity_id:
-            controller.controlsModule.activate()
+            # controller.controlsModule.activate()
             controller.sttModule.activate()
+        else:
+            # Setup VTS Plugin Controller for Entity and set initial values
+            vtsc = VTSController(
+                endpoint=vts_config["endpoint"].strip(),
+                plugin_name=f"Harmony-Link-Plugin-{entity_id}",
+            )
+            try:
+                await vtsc.initialise()
+                chara = Chara(controller=vtsc)
+                await chara.controller.set_mouth_open(0)
+                # Update all controller modules with new chara actor
+                controller.update_chara(chara)
+            except Exception as e:
+                _error_abort(f"Initialization on VTS failed for entity '{entity_id}': {e}")
+                return
 
         # Inform Harmony Link that the scene finished loading for this Entity
         environment_loaded_event = common.HarmonyLinkEvent(
@@ -339,14 +305,14 @@ def real_start(game):
         )
         send_success = controller.connector.send_event(environment_loaded_event)
         if send_success:
-            print('Harmony Link: Scene Data finished loading for entity "{0}"'.format(entity_id))
+            logging.info('Harmony Link: Scene Data finished loading for entity "{0}"'.format(entity_id))
         else:
-            print('Harmony Link: Failed to transmit scene loading finished for entity "{0}"'.format(entity_id))
+            logging.warning('Harmony Link: Failed to transmit scene loading finished for entity "{0}"'.format(entity_id))
 
 
-def _error_abort(game, error):
-    print ("**** Error aborted ****\n>>" + error)
-    shutdown(game)
+def _error_abort(error):
+    logging.error("**** Error aborted ****\n" + error)
+    shutdown()
 
 
 def load_config():
@@ -357,32 +323,8 @@ def load_config():
     return config
 
 
-def _load_scene(game, param):
-    game.fake_lipsync_stop()  # required by framework - stop lipsynd if we has it
-    game.load_scene(param)
-    game.set_timer(0.2, _reg_framework)  # required by framework - we need actors and props after scene load
-
-
-def _reg_framework(game):
-    game.scenef_register_actorsprops()
-
-
-def _to_cam(game, camera_id):
-    # instant move to camera
-    game.to_camera(camera_id)
-
-
-def _to_cam_animated(game, camera_id, time=3, move_style="fast-slow3"):
-    # animated move to camera - 3 seconds, with-fast-slow movement style
-    game.anim_to_camera_num(time, camera_id, move_style)
-    # game.anim_to_camera_num(3, param, {'style':"linear",'zooming_in_target_camera':6}) # cool camera move with zoom-out - zoom-in
-
-
-def shutdown(game):
-    # Shutdown all Characters
+def shutdown():
+    # Shutdown all Entities
     for controller in harmony_globals.active_entities.values():
         controller.shutdown_modules()
-
-    game.set_text("s", "Harmony Link Plugin for VNGE successfully stopped.")
-    game.set_buttons(["Return to main screen >>"], [[game.return_to_start_screen_clear]])
 

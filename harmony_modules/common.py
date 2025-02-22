@@ -2,7 +2,7 @@
 # (c) 2023-2025 Project Harmony.AI (contact@project-harmony.ai)
 #
 # This file contains basic types required by all plugin modules.
-
+import logging
 
 # Event States
 EVENT_STATE_DONE = 'SUCCESS'  # Event was handled and returned successfully.
@@ -74,11 +74,11 @@ class HarmonyClientModuleBase:
         self.active = False
 
     def update_ai_state(self, ai_state):
-        print('[{0}]: Updated AI State:'.format(self.__class__.__name__))
+        logging.debug('[{0}]: Updated AI State:'.format(self.__class__.__name__))
 
         if ai_state is None or len(ai_state) == 0:
             self.ai_state = None
-            print('[{0}]: AI State set to none'.format(self.__class__.__name__))
+            logging.debug('[{0}]: AI State set to none'.format(self.__class__.__name__))
 
         if self.ai_state is None:
             self.ai_state = AIState()
@@ -91,19 +91,19 @@ class HarmonyClientModuleBase:
         self.ai_state.status_message = ai_state["status_message"]
 
         if isinstance(self.ai_state, AIState):
-            print('[{0}]: Gender: {1}.'.format(self.__class__.__name__, self.ai_state.gender))
-            print('[{0}]: Name: {1}.'.format(self.__class__.__name__, self.ai_state.name))
-            print('[{0}]: Mood: {1}.'.format(self.__class__.__name__, self.ai_state.mood))
-            print('[{0}]: Behaviour: {1}.'.format(self.__class__.__name__, self.ai_state.behaviour))
-            print('[{0}]: Persona: {1}.'.format(self.__class__.__name__, self.ai_state.persona))
-            print('[{0}]: Status Message: {1}.'.format(self.__class__.__name__, self.ai_state.status_message))
+            logging.debug('[{0}]: Gender: {1}.'.format(self.__class__.__name__, self.ai_state.gender))
+            logging.debug('[{0}]: Name: {1}.'.format(self.__class__.__name__, self.ai_state.name))
+            logging.debug('[{0}]: Mood: {1}.'.format(self.__class__.__name__, self.ai_state.mood))
+            logging.debug('[{0}]: Behaviour: {1}.'.format(self.__class__.__name__, self.ai_state.behaviour))
+            logging.debug('[{0}]: Persona: {1}.'.format(self.__class__.__name__, self.ai_state.persona))
+            logging.debug('[{0}]: Status Message: {1}.'.format(self.__class__.__name__, self.ai_state.status_message))
 
     def update_countenance_state(self, countenance_state):
-        print('[{0}]: Updated Countenance State:'.format(self.__class__.__name__))
+        logging.debug('[{0}]: Updated Countenance State:'.format(self.__class__.__name__))
 
         if countenance_state is None or len(countenance_state) == 0:
             self.countenance_state = None
-            print('[{0}]: Countenance State set to none'.format(self.__class__.__name__))
+            logging.debug('[{0}]: Countenance State set to none'.format(self.__class__.__name__))
 
         if self.countenance_state is None:
             self.countenance_state = CountenanceState()
@@ -112,11 +112,11 @@ class HarmonyClientModuleBase:
         self.countenance_state.facial_expression = countenance_state["facial_expression"]
 
         if isinstance(self.countenance_state, CountenanceState):
-            print('[{0}]: Emotional State: {1}.'.format(self.__class__.__name__, self.countenance_state.emotional_state))
-            print('[{0}]: Facial Expression: {1}.'.format(self.__class__.__name__, self.countenance_state.facial_expression))
+            logging.debug('[{0}]: Emotional State: {1}.'.format(self.__class__.__name__, self.countenance_state.emotional_state))
+            logging.debug('[{0}]: Facial Expression: {1}.'.format(self.__class__.__name__, self.countenance_state.facial_expression))
 
     def update_chara(self, chara):
-        print('[{0}]: Updated Chara:'.format(self.__class__.__name__))
+        logging.debug('[{0}]: Updated Chara:'.format(self.__class__.__name__))
         self.chara = chara
 
     def handle_event(

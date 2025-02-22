@@ -5,6 +5,8 @@
 # This module uses WebSocket connections to interface with Harmony Link's Event Backend
 
 import asyncio
+import logging
+
 import websockets
 import json
 from threading import Thread
@@ -19,14 +21,13 @@ class HarmonyEventJSONEncoder(json.JSONEncoder):
 
 
 class ConnectorEventHandler:
-    def __init__(self, ws_endpoint, shutdown_func, game):
+    def __init__(self, ws_endpoint, shutdown_func):
         # Setup Config Params
         self.ws_endpoint = ws_endpoint
 
         # Setup Connector
         self.eventHandlers = []
         self.shutdown_func = shutdown_func
-        self.game = game
         self.running = False
         self.event_loop = None
         self.thread = None
@@ -34,7 +35,7 @@ class ConnectorEventHandler:
         self.send_queue = asyncio.Queue()
 
     def start(self):
-        print('Starting ConnectorEventHandler')
+        logging.debug('Starting ConnectorEventHandler')
         self.running = True
         self.event_loop = asyncio.new_event_loop()
         self.thread = Thread(target=self.event_loop.run_until_complete, args=(self.run(),))
@@ -53,8 +54,8 @@ class ConnectorEventHandler:
                 for task in pending:
                     task.cancel()
         except Exception as e:
-            print(f'WebSocket connection failed: {e}')
-            self.shutdown_func(self.game)
+            logging.error(f'WebSocket connection failed: {e}')
+            self.shutdown_func()
 
     async def consumer_handler(self):
         while self.running:
@@ -62,8 +63,8 @@ class ConnectorEventHandler:
                 message_string = await self.websocket.recv()
                 self.process_event_message(message_string)
             except websockets.exceptions.ConnectionClosed:
-                print('WebSocket connection closed')
-                self.shutdown_func(self.game)
+                logging.error('WebSocket connection closed')
+                self.shutdown_func()
                 break
 
     async def producer_handler(self):
@@ -74,20 +75,20 @@ class ConnectorEventHandler:
 
     def process_event_message(self, message_string):
         if len(message_string) == 0:
-            print('Warning: Message event was empty!')
+            logging.warning('Message event was empty!')
             return
 
         try:
             message_json = json.loads(message_string)
-            print(f'DEBUG: Event message received: {message_string}')
+            logging.debug(f'Event message received: {message_string}')
             message = HarmonyLinkEvent(**message_json)
             self.handle_event(event=message)
         except ValueError as e:
-            print(f'Failed to read event message: {str(e)}')
-            print(f'Original message: {message_string}')
+            logging.error(f'Failed to read event message: {str(e)}')
+            logging.error(f'Original message: {message_string}')
 
     def stop(self):
-        print('Stopping ConnectorEventHandler')
+        logging.debug('Stopping ConnectorEventHandler')
         self.running = False
         # Wait for thread to finish
         if self.thread.is_alive():
@@ -113,7 +114,7 @@ class ConnectorEventHandler:
         if not isinstance(event, HarmonyLinkEvent):
             if not isinstance(event, str):
                 event = json.dumps(event, cls=HarmonyEventJSONEncoder)
-            print(f'Warning: Invalid event received. Data: {event}')
+            logging.warning(f'Invalid event received. Data: {event}')
         else:
             for event_handler in self.eventHandlers:
                 event_handler.handle_event(event)

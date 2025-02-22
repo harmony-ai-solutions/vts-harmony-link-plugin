@@ -1,17 +1,16 @@
-import asyncio
+import logging
 import uuid
+from json import dumps, loads
+from os import getenv
 
 import websockets
-from json import dumps, loads
-
 from dotenv import load_dotenv, set_key
-from os import getenv
 
 
 class VTSController:
     def __init__(
         self,
-        port: int = 8001,
+        endpoint: str = "ws://localhost:8001",
         plugin_name: str = 'Harmony-Link-Plugin',
         plugin_developer: str = 'HarmonyAI-Solutions'
     ) -> None:
@@ -19,7 +18,7 @@ class VTSController:
             'pluginName': plugin_name,
             'pluginDeveloper': plugin_developer
         }
-        self.port = port
+        self.endpoint = endpoint
         self.vts_token = None
         self.websocket = None
 
@@ -39,12 +38,12 @@ class VTSController:
         self.update_dotenv()
 
         if not self.vts_token:
-            print("VTS Token not set, requesting new token...")
+            logging.debug("VTS Token not set, requesting new token...")
             res = await self.send_request(message_type='AuthenticationTokenRequest', data=self.base_info)
             if res['messageType'] == 'APIError':
                 raise Exception(f"Error occured:\n\t{res['data']['message']}")
             self.__update_token(res['data']['authenticationToken'])
-            print("VTS Token updated")
+            logging.debug("VTS Token updated")
             return
 
         res = await self.send_request(message_type='AuthenticationRequest',
@@ -54,13 +53,19 @@ class VTSController:
 
     async def initialise(self) -> None:
         self.update_dotenv()
-
-        self.websocket = await websockets.connect(f"ws://localhost:{self.port}")
-
-        res = await self.send_request(message_type='APIStateRequest')
+        try:
+            self.websocket = await websockets.connect(self.endpoint)
+            res = await self.send_request(message_type='APIStateRequest')
+        except Exception as e:
+            logging.error(f"WebSocket initialization error: {e}")
+            raise
 
         if not res['data']['currentSessionAuthenticated']:
-            await self.authentication()
+            try:
+                await self.authentication()
+            except Exception as e:
+                logging.error(f"Authentication error: {e}")
+                raise
 
     async def inject_params(self, parameters: list) -> None:
         data = {
@@ -71,6 +76,9 @@ class VTSController:
 
         await self.send_request(message_type='InjectParameterDataRequest', data=data)
 
+    async def set_mouth_open(self, mouth_open: float = 0.0) -> None:
+        await self.inject_params([['MouthOpen', mouth_open]])
+
     def update_dotenv(self) -> None:
         load_dotenv(override=True)
         self.vts_token = getenv("VTS_TOKEN")
@@ -78,17 +86,3 @@ class VTSController:
     def __update_token(self, token: str) -> None:
         self.vts_token = token
         set_key('.env', 'VTS_TOKEN', token)
-
-
-async def main():
-    vtsc = VTSController()
-    await vtsc.initialise()
-    while True:
-        await vtsc.inject_params([['MouthOpen', 0.0]])
-        await asyncio.sleep(1)
-        await vtsc.inject_params([['MouthOpen', 1.0]])
-        await asyncio.sleep(1)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
