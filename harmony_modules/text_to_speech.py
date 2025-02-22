@@ -38,31 +38,28 @@ class TTSProcessorThread(Thread):
             self.running = False
 
     def wait_voice_played(self):
-        if not self.tts_handler.playing_utterance:
-            logging.error('[{0}]: Tried to monitor an undefined utterance player!'.format(
-                self.tts_handler.__class__.__name__))
+        if not self.tts_handler.playing_stream:
+            logging.error('[{0}]: Tried to monitor an undefined playback stream!')
             return True
 
-        if self.tts_handler.playing_utterance.isPlaying:
-            # Add LipSync to chara
+        if self.tts_handler.playing_stream.is_active():
             self.tts_handler.fake_lipsync_update()
-            # return false means job not done, it will run again in next update
             return False
         else:
             # here the sound file is played, you can mark some flag or delete the file
-            logging.debug('[{0}]: done playing file: {1}!'.format(self.tts_handler.__class__.__name__,
-                                                          self.tts_handler.playing_utterance.filename))
+            logging.debug('[{0}]: Done playing file: {1}!'.format(self.tts_handler.__class__.__name__, self.tts_handler.playing_utterance['audio_file']))
             # Send Message to Harmony Link to delete the source file from disk
             playback_done_event = HarmonyLinkEvent(
                 event_id='playback_done',  # This is an arbitrary dummy ID to conform the Harmony Link API
                 event_type=EVENT_TYPE_TTS_PLAYBACK_DONE,
                 status=EVENT_STATE_NEW,
-                payload=self.tts_handler.playing_utterance.filename
+                payload=self.tts_handler.playing_utterance['audio_file']
             )
             self.tts_handler.backend_connector.send_event(playback_done_event)
-            self.tts_handler.playing_utterance.Cleanup()
+            self.tts_handler.playing_stream.close()
             self.tts_handler.fake_lipsync_stop()
             # Recursive call to PlayVoice in case we have pending audios for this AI Entity
+            self.tts_handler.playing_stream = None
             self.tts_handler.playing_utterance = None
             self.tts_handler.play_voice()
             return True
@@ -80,6 +77,7 @@ class TextToSpeechHandler(HarmonyClientModuleBase):
         # TTS Handling
         self.speech_suppressed = False
         self.playing_utterance = None
+        self.playing_stream = None
         self.pending_utterances = []
 
     def setup_speaker(self):
@@ -109,7 +107,7 @@ class TextToSpeechHandler(HarmonyClientModuleBase):
             sd.default.samplerate = 44100
             sd.default.device = device_id
         except sd.PortAudioError:
-            print("Invalid output device! Make sure you've launched VB-Cable.\n",
+            logging.error("Invalid output device! Make sure you've launched VB-Cable.\n",
                   "Check that you've choosed the correct output_device in initialize method.\n",
                   "From the list below, select device that starts with 'CABLE Input' and set output_device to it's id in list.\n",
                   "If you still have this error try every device that starts with 'CABLE Input'. If it doesn't help please create GitHub issue.")
@@ -149,11 +147,15 @@ class TextToSpeechHandler(HarmonyClientModuleBase):
                 # Build Sound source and queue it for playing
                 # soundType can be "BGM", "ENV", "SystemSE" or "GameSE"
                 # they are almost the same but with separated volume control in studio setting
-                utterance_data = sf.read(audio_file)
+                audio_data, sample_rate = sf.read(audio_file)
                 logging.debug('[{0}]: Successfully loaded audio file: {1}'.format(self.__class__.__name__, audio_file))
 
                 # Append to queue
-                self.pending_utterances.append(utterance_data)
+                self.pending_utterances.append((
+                    audio_file,
+                    audio_data,
+                    sample_rate
+                ))
                 # Play
                 self.play_voice()
 
@@ -166,11 +168,41 @@ class TextToSpeechHandler(HarmonyClientModuleBase):
             return
 
         if len(self.pending_utterances) > 0:
-            self.playing_utterance = self.pending_utterances.pop(0)
+            audio_file, audio_data, sample_rate = self.pending_utterances.pop(0)
 
-            self.playing_utterance.Play()
-            logging.debug('[{0}]: Playing audio file: {1}'.format(self.__class__.__name__, self.playing_utterance.filename))
-            # add monitor job to check play status and perform lipsync updates
+            # Keep reference to the currently playing utterance
+            self.playing_utterance = {
+                'audio_file': audio_file,
+                'audio_data': audio_data,
+                'sample_rate': sample_rate,
+                'index': 0,
+                'length': len(audio_data)
+            }
+
+            def callback(outdata, frames, time, status):
+                start = self.playing_utterance['index']
+                end = start + frames
+                if end > self.playing_utterance['length']:
+                    end = self.playing_utterance['length']
+                    outdata[:end - start] = self.playing_utterance['audio_data'][start:end]
+                    outdata[end - start:] = 0
+                    raise sd.CallbackStop()
+                else:
+                    outdata[:] = self.playing_utterance['audio_data'][start:end]
+                self.playing_utterance['index'] = end
+
+            if self.playing_utterance['audio_data'].ndim > 1:
+                channels = self.playing_utterance['audio_data'].shape[1]
+            else:
+                channels = 1
+
+            self.playing_stream = sd.OutputStream(
+                samplerate=self.playing_utterance['sample_rate'],
+                channels=channels,
+                callback=callback
+            ).start()
+
+            logging.debug('[{0}]: Playing audio file: {1}'.format(self.__class__.__name__, audio_file))
             TTSProcessorThread(tts_handler=self).start()
 
     def suppress_speech(self, suppress=False):
