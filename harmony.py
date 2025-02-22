@@ -15,7 +15,7 @@ import time
 import harmony_globals
 from VTSController import VTSController
 from harmony_modules import connector, common, text_to_speech, speech_to_text, \
-    perception  # , countenance, controls, movement
+    perception, controls  # , backend, countenance, movement
 from harmony_modules.common import EVENT_TYPE_INIT_ENTITY
 
 # Config
@@ -99,7 +99,7 @@ class EntityController:
             return
 
         # Set active
-        logging.debug('Starting ActorEntityController for entity \'{0}\'...'.format(self.entity_id))
+        logging.debug('Starting EntityController for entity \'{0}\'...'.format(self.entity_id))
         self.is_active = True
 
         # Initialize Character on Harmony Link
@@ -172,12 +172,11 @@ class EntityController:
         self.perceptionModule.activate()
 
         # Init User Controls Module
-        # self.controlsModule = controls.ControlsHandler(
-        #     entity_controller=self,
-        #     game=self.game,
-        #     shutdown_func=shutdown,
-        #     controls_keymap_config=dict(self.config.items('Controls.Keymap'))
-        # )
+        self.controlsModule = controls.ControlsHandler(
+            entity_controller=self,
+            shutdown_func=shutdown,
+            controls_keymap_config=dict(self.config.items('Controls.Keymap'))
+        )
 
         return None
 
@@ -191,18 +190,18 @@ class EntityController:
     def update_chara(self, chara):
         self.chara = chara
         # Update in submodules
-        self.backendModule.update_chara(self.chara)
-        self.countenanceModule.update_chara(self.chara)
+        # self.backendModule.update_chara(self.chara)
+        # self.countenanceModule.update_chara(self.chara)
         self.ttsModule.update_chara(self.chara)
         self.sttModule.update_chara(self.chara)
-        self.movementModule.update_chara(self.chara)
+        # self.movementModule.update_chara(self.chara)
 
     def shutdown_modules(self):
-        self.backendModule.deactivate()
+        # self.backendModule.deactivate()
         self.sttModule.deactivate()
         self.ttsModule.deactivate()
-        self.countenanceModule.deactivate()
-        self.movementModule.deactivate()
+        # self.countenanceModule.deactivate()
+        # self.movementModule.deactivate()
         self.controlsModule.deactivate()
 
         self.connector.stop()
@@ -278,7 +277,7 @@ async def post_init():
 
         # Initialize controls module and STT module if it's the user entity
         if entity_id == harmony_globals.user_controlled_entity_id:
-            # controller.controlsModule.activate()
+            controller.controlsModule.activate()
             controller.sttModule.activate()
         else:
             # Setup VTS Plugin Controller for Entity and set initial values

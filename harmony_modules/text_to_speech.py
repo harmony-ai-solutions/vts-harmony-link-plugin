@@ -14,9 +14,8 @@ import random
 import time
 from threading import Thread
 
-rng = random.WichmannHill()
-# we will not use simple random because of bug
-# see https://github.com/IronLanguages/ironpython2/issues/231 for details
+# Specify RNG lib here in case we need to replace it at some point
+rng = random.Random()
 
 
 class TTSProcessorThread(Thread):

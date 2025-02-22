@@ -4,8 +4,6 @@
 # This file contains all handling to be done with the Harmony Link STT Module
 #
 # Import Client base Module
-from numpy.ma.core import min_filler, max_filler
-
 from harmony_modules.common import *
 
 from threading import Thread, Lock
