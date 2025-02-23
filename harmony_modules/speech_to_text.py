@@ -4,89 +4,21 @@
 # This file contains all handling to be done with the Harmony Link STT Module
 #
 # Import Client base Module
+import logging
+
 from harmony_modules.common import *
 
-from threading import Thread, Lock
+import threading
 import base64
 import time
-import struct
+import sounddevice as sd
 
 # Constants
 RESULT_MODE_PROCESS = "process"
 RESULT_MODE_RETURN = "return"
 
 
-class MicrophoneRecordingThread(Thread):
-    def __init__(self, stt_handler, record_stepping=100):
-        # Execute the base constructor
-        Thread.__init__(self)
-        # Control flow
-        self.running = False
-        # Params
-        self.tts_handler = stt_handler
-        self.record_stepping = record_stepping  # in milliseconds
-        self.sleep_time = record_stepping / 1000.0  # Convert to seconds
-        self.last_sample_position = 0
-        self.clip_samples = self.tts_handler.recording_clip.samples
-        self.channels = self.tts_handler.channels
-        self.bytes_per_sample = self.tts_handler.bytes_per_sample
-        self.bytes_per_second = self.tts_handler.bytes_per_second
-        self.max_buffer_bytes = self.tts_handler.max_buffer_bytes
-
-    def run(self):
-        self.running = True
-        while self.running:
-            current_position = Microphone.GetPosition(self.tts_handler.microphone_name)
-            sample_count = 0
-            if current_position < self.last_sample_position:
-                # Wrap-around occurred
-                sample_count = self.clip_samples - self.last_sample_position + current_position
-            else:
-                sample_count = current_position - self.last_sample_position
-
-            if sample_count > 0:
-                samples = Array.CreateInstance(Single, sample_count)
-                # Read samples from last_sample_position to current_position
-                if current_position >= self.last_sample_position:
-                    # No wrap-around
-                    self.tts_handler.recording_clip.GetData(samples, self.last_sample_position)
-                else:
-                    # Wrap-around
-                    first_part_length = self.clip_samples - self.last_sample_position
-                    first_part_samples = Array.CreateInstance(Single, first_part_length)
-                    self.tts_handler.recording_clip.GetData(first_part_samples, self.last_sample_position)
-                    second_part_length = current_position
-                    second_part_samples = Array.CreateInstance(Single, second_part_length)
-                    self.tts_handler.recording_clip.GetData(second_part_samples, 0)
-                    # Combine samples
-                    first_part_samples.CopyTo(samples, 0)
-                    second_part_samples.CopyTo(samples, first_part_length)
-
-                # Convert samples to 16-bit PCM byte data
-                audio_bytes = b''.join([struct.pack('<h', int(max(min(s, 1.0), -1.0) * 32767)) for s in samples])
-
-                # Lock the buffer while appending
-                with self.tts_handler.lock:
-                    # Append new audio bytes
-                    self.tts_handler.recording_buffer.extend(audio_bytes)
-                    # Remove oldest data if buffer exceeds max size
-                    buffer_length = len(self.tts_handler.recording_buffer)
-                    if buffer_length > self.max_buffer_bytes:
-                        excess_bytes = buffer_length - self.max_buffer_bytes
-                        del self.tts_handler.recording_buffer[:excess_bytes]
-                        self.tts_handler.dropped_buffer_bytes += excess_bytes
-
-                # Update last_sample_position
-                self.last_sample_position = current_position
-
-            # Sleep for the record stepping interval
-            time.sleep(self.sleep_time)
-
-    def stop(self):
-        self.running = False
-
-
-# CountenanceHandler - module main class
+# SpeechToTextHandler - module main class
 class SpeechToTextHandler(HarmonyClientModuleBase):
     def __init__(self, entity_controller, stt_config):
         # execute the base constructor
@@ -104,11 +36,10 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
         self.is_recording_microphone = False
         self.active_recording_events = {}
         self.recording_buffer = None # bytearray
-        self.recording_clip = None # AudioClip
         self.recording_start_time = None # time.time
-        self.recording_thread = None
         self.dropped_buffer_bytes = 0
-        self.lock = Lock()
+        self.lock = threading.Lock()
+        self.audio_stream = None
         # Calculate bytes per second
         self.bytes_per_sample = self.bit_depth // 8
         self.bytes_per_second = self.sample_rate * self.channels * self.bytes_per_sample
@@ -179,7 +110,7 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
             bytes_count = recording_task.get('bytes_count', self.bytes_per_second * 5)  # Default to 5 seconds
 
             # Start a new thread to handle recording
-            fetch_microphone_thread = Thread(
+            fetch_microphone_thread = threading.Thread(
                 target=self.process_recording_request,
                 args=(event.event_id, start_byte, bytes_count)
             )
@@ -192,16 +123,9 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
         if self.is_recording_microphone:
             return False
 
-        # Start recording from microphone via Unity's APIs:
+        # Start recording from microphone via sounddevice
         if not self.start_continuous_recording():
             return False
-
-        # Start the recording thread
-        self.recording_thread = MicrophoneRecordingThread(
-            stt_handler=self,
-            record_stepping=self.record_stepping
-        )
-        self.recording_thread.start()
 
         # Send Event to Harmony Link to listen to the recorded Audio
         event = HarmonyLinkEvent(
@@ -254,98 +178,111 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
 
     def get_microphone(self):
         # Determine the microphone to use
-        devices = Microphone.devices
-        device_capabilities = {}
+        devices = sd.query_devices()
+        input_devices = [device for device in devices if device['max_input_channels'] > 0]
         microphone_name = self.config['microphone']
-        # REMARK: Some Microphone names cannot be displayed on some Unity Versions
-        # https://stackoverflow.com/questions/44250989/unity-design-flaw-how-to-distinguish-microphones-with-empty-names-or-same-name
-        #
-        # Therefore we explicitly allow microphone name to be an empty string
-        if len(devices) <= 0:
+
+        if len(input_devices) <= 0:
             print('No microphone available.')
             return None
         else:
             print('Available microphones:')
-            for mic_id, device in enumerate(devices):
-                # Get recording capabilities
-                min_freq, max_freq = Microphone.GetDeviceCaps(device)
-                print("{0} : {1} (MinFreq: {2}, MaxFreq: {3})".format(mic_id, device, min_freq, max_freq))
-                device_capabilities[device] = (min_freq, max_freq)
+            for idx, device in enumerate(input_devices):
+                print("{0} : {1}".format(idx, device['name']))
 
         if microphone_name == 'default':
-            microphone_name = devices[0]
-        elif microphone_name not in device_capabilities:
-            print('No microphone with provided name "{0}" available.'.format(microphone_name))
-            return None
-
-        # Check for correct sample rate being used
-        min_freq, max_freq = device_capabilities[microphone_name]
-        if not min_freq == 0 and not max_freq == 0:
-            if self.sample_rate > max_freq:
-                self.sample_rate = max_freq
-                print("correcting sample rate from config to {0}".format(self.sample_rate))
-            elif self.sample_rate < min_freq:
-                self.sample_rate = min_freq
-                print("correcting sample rate from config to {0}".format(self.sample_rate))
+            # Get the index of the default input device
+            default_device_index = sd.default.device[0]
+            # Retrieve the name of the default input device
+            microphone_name = sd.query_devices(default_device_index)['name']
+        else:
+            matching_devices = [device for device in input_devices if microphone_name in device['name']]
+            if matching_devices:
+                microphone_name = matching_devices[0]['name']
+            else:
+                print('No microphone with provided name "{0}" available.'.format(microphone_name))
+                return None
 
         return microphone_name
 
     def start_continuous_recording(self):
-        # This starts a continous microphone recording clip which will be used to fetch
-        # audio samples for Harmony's STT transcription module from
-
-        # REMARK: Some Microphone names cannot be displayed on some Unity Versions
-        # https://stackoverflow.com/questions/44250989/unity-design-flaw-how-to-distinguish-microphones-with-empty-names-or-same-name
-        #
-        # Therefore we explicitly allow microphone name to be an empty string
-        if self.microphone_name is None or not isinstance(self.microphone_name, str):
-            print('No microphone available.')
-            return False
+        # This starts a continuous microphone recording clip which will be used to fetch
+        # audio samples for Harmony's STT transcription module from the microphone
 
         # Reset Buffer before starting recording
         self.recording_buffer = bytearray()
         self.dropped_buffer_bytes = 0
 
-        print('Recording with microphone: "{0}"'.format(self.microphone_name))
-        self.recording_clip = Microphone.Start(self.microphone_name, True, self.record_stepping, self.sample_rate)
-        # Wait until recording has started
-        start_time = time.time()
-        while not Microphone.IsRecording(self.microphone_name):
-            if time.time() - start_time > 1.0:
-                print('Failed to start continuous recording.')
-                return False
-            time.sleep(0.1)
-        print('Continuous recording started.')
-        self.recording_start_time = time.time()
-        return True
+        logging.debug('Recording with microphone: "{0}"'.format(self.microphone_name))
+
+        def audio_stream_callback(indata, frames, time_info, status):
+            if status:
+                logging.debug(f"recording callback status: {status}")
+            audio_data = indata.tobytes()
+            with self.lock:
+                self.recording_buffer.extend(audio_data)
+                # Remove oldest data if buffer exceeds max size
+                buffer_length = len(self.recording_buffer)
+                if buffer_length > self.max_buffer_bytes:
+                    excess_bytes = buffer_length - self.max_buffer_bytes
+                    del self.recording_buffer[:excess_bytes]
+                    self.dropped_buffer_bytes += excess_bytes
+
+        try:
+            # Get correct dtype
+            if self.bit_depth == 8:
+                dtype = 'int8'
+            elif self.bit_depth == 16:
+                dtype = 'int16'
+            elif self.bit_depth == 24:
+                dtype = 'int24'  # Note: int24 might not be supported directly
+            elif self.bit_depth == 32:
+                dtype = 'int32'
+            else:
+                raise ValueError(f"Unsupported bit depth: {self.bit_depth}")
+
+            # Create stream
+            self.audio_stream = sd.RawInputStream(
+                samplerate=self.sample_rate,
+                blocksize=int(self.sample_rate * self.record_stepping / 1000),
+                device=self.microphone_name,
+                channels=self.channels,
+                dtype=dtype,
+                callback=audio_stream_callback
+            )
+            self.audio_stream.start()
+            self.recording_start_time = time.time()
+            print('Continuous recording started.')
+            return True
+        except Exception as e:
+            print('Failed to start continuous recording: {}'.format(e))
+            return False
 
     def stop_continuous_recording(self):
-        if not self.is_recording_microphone or self.recording_clip is None or not Microphone.IsRecording(self.microphone_name):
+        if self.audio_stream is None:
             return False
 
         # Wait until all recording events have completed
         timeout_counter = 0
         while len(self.active_recording_events) > 0:
             if timeout_counter % 10 == 0:
-                print('waiting for recording clips to finish...')
+                logging.debug('Waiting for recording events to finish...')
             if timeout_counter < 100:
                 timeout_counter += 1
                 time.sleep(0.1)
             else:
-                print('recording events did not finish within timeout of 10 seconds')
-                return False
+                logging.warning('Recording events did not finish within timeout of 10 seconds')
+                break  # Proceed to stop recording anyway
 
-        # Stop the microphone recording
-        Microphone.End(self.microphone_name)
-
-        # Stop the recording thread
-        if self.recording_thread is not None:
-            self.recording_thread.stop()
-            self.recording_thread.join()
-            self.recording_thread = None
-
-        print('Continuous recording stopped.')
-        return True
+        try:
+            self.audio_stream.stop()
+            self.audio_stream.close()
+            self.audio_stream = None
+            print('Continuous recording stopped.')
+            return True
+        except Exception as e:
+            print('Failed to stop recording: {}'.format(e))
+            return False
 
     def get_buffer_fetch_indices(self, start_byte, end_byte):
         actual_start_byte = start_byte - self.dropped_buffer_bytes
@@ -381,9 +318,9 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
             actual_start_byte, actual_end_byte, buffer_size = self.get_buffer_fetch_indices(start_byte, end_byte)
 
             # Log final indices
-            print("Bytes count: {0}".format(bytes_count))
-            print("Start byte (total / buffer): {0} / {1}".format(start_byte, start_byte - self.dropped_buffer_bytes))
-            print("End byte (total / buffer): {0} / {1}".format(end_byte, end_byte - self.dropped_buffer_bytes))
+            logging.debug("Bytes count: {0}".format(bytes_count))
+            logging.debug("Start byte (total / buffer): {0} / {1}".format(start_byte, start_byte - self.dropped_buffer_bytes))
+            logging.debug("End byte (total / buffer): {0} / {1}".format(end_byte, end_byte - self.dropped_buffer_bytes))
 
             audio_bytes = self.recording_buffer[actual_start_byte:actual_end_byte]
 
