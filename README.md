@@ -41,7 +41,7 @@
 ## Installation
 
 To run this project, you need:
- 1. Install Python 3.10.5 if you don't already have it installed.
+ 1. Install Python 3.12 if you don't already have it installed.
  2. Clone the repository by running `git clone https://github.com/JarikDem-Bot/ai-waifu.git`
  3. Install the required Python packages by running `pip install -r requirements.txt` in the project directory.
  4. Create `.env` file inside the project directory and enter your API keys

@@ -142,11 +142,11 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
         )
         success = self.backend_connector.send_event(event)
         if success:
-            print('Harmony Link: listening...')
+            logging.info('Harmony Link: listening...')
             self.is_recording_microphone = True
             return True
         else:
-            print('Harmony Link: listen failed')
+            logging.error('Harmony Link: listen failed')
             # Stop recording
             return False
 
@@ -163,32 +163,34 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
         )
         success = self.backend_connector.send_event(event)
         if success:
-            print('Harmony Link: listening stopped. Processing speech...')
+            logging.info('Harmony Link: listening stopped. Processing speech...')
 
             # Stop recording to ongoing audio clip
             if not self.stop_continuous_recording():
-                print('failed to stop continous recording')
+                logging.error('failed to stop continous recording')
                 return False
 
             self.is_recording_microphone = False
             return True
         else:
-            print('Harmony Link: stop listen failed.')
+            logging.error('Harmony Link: stop listen failed.')
             return False
 
     def get_microphone(self):
+        logging.debug('setting up microphone / audio input device')
         # Determine the microphone to use
         devices = sd.query_devices()
         input_devices = [device for device in devices if device['max_input_channels'] > 0]
         microphone_name = self.config['microphone']
 
         if len(input_devices) <= 0:
-            print('No microphone available.')
+            logging.warning('No microphone available.')
             return None
         else:
-            print('Available microphones:')
+            microphones = ""
             for idx, device in enumerate(input_devices):
-                print("{0} : {1}".format(idx, device['name']))
+                microphones += "{0} : {1}\n".format(idx, device['name'])
+            logging.debug(f"Available microphones:\n{microphones}")
 
         if microphone_name == 'default':
             # Get the index of the default input device
@@ -200,7 +202,7 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
             if matching_devices:
                 microphone_name = matching_devices[0]['name']
             else:
-                print('No microphone with provided name "{0}" available.'.format(microphone_name))
+                logging.warning('No microphone with provided name "{0}" available.'.format(microphone_name))
                 return None
 
         return microphone_name
@@ -252,10 +254,10 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
             )
             self.audio_stream.start()
             self.recording_start_time = time.time()
-            print('Continuous recording started.')
+            logging.debug('Continuous recording started.')
             return True
         except Exception as e:
-            print('Failed to start continuous recording: {}'.format(e))
+            logging.error('Failed to start continuous recording: {}'.format(e))
             return False
 
     def stop_continuous_recording(self):
@@ -278,10 +280,10 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
             self.audio_stream.stop()
             self.audio_stream.close()
             self.audio_stream = None
-            print('Continuous recording stopped.')
+            logging.debug('Continuous recording stopped.')
             return True
         except Exception as e:
-            print('Failed to stop recording: {}'.format(e))
+            logging.error('Failed to stop recording: {}'.format(e))
             return False
 
     def get_buffer_fetch_indices(self, start_byte, end_byte):

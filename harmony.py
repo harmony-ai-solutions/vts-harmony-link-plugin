@@ -316,7 +316,7 @@ def _error_abort(error):
 
 def load_config():
     # read from .ini file
-    config = configparser.SafeConfigParser()
+    config = configparser.ConfigParser()
     config_path = os.path.splitext(__file__)[0] + '.ini'
     config.read(config_path)
     return config

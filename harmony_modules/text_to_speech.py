@@ -80,8 +80,8 @@ class TextToSpeechHandler(HarmonyClientModuleBase):
         self.pending_utterances = []
 
     def setup_speaker(self):
-        available_devices = sd.query_devices()
         logging.debug('setting up speaker / audio output device')
+        available_devices = sd.query_devices()
         logging.debug(f"available devices:\n {available_devices}")
 
         if len(available_devices) == 0:
@@ -92,7 +92,7 @@ class TextToSpeechHandler(HarmonyClientModuleBase):
             if device_id < 0:
                 # This searches for a device with text 'CABLE Input' in it's name, in case no override is specified
                 for idx, device in enumerate(available_devices):
-                    if 'CABLE Input' in device.name:
+                    if 'CABLE Input' in device['name']:
                         device_id = idx
                         break
                 # If no cable input is found, just try to use random output
