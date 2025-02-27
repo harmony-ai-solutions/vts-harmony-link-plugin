@@ -16,7 +16,10 @@ async def main() -> None:
     )
 
     # Init Harmony Link Plugin
-    start_harmony_ai()
+    await start_harmony_ai()
+
+    # Continuous event loop so the application won't shut down
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":

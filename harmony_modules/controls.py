@@ -6,6 +6,7 @@
 # Import Backend base Module
 from harmony_modules.common import *
 
+import asyncio
 from pynput import keyboard
 
 # ControlsHandler - module main class
@@ -22,8 +23,10 @@ class ControlsHandler(HarmonyClientModuleBase):
         # Keyboard handling
         self.is_key_pressed = False
         self.listener = None
+        # Event loop reference for synchronizing threads
+        self.loop = asyncio.get_event_loop()
 
-    def handle_event(
+    async def handle_event(
             self,
             event  # HarmonyLinkEvent
     ):
@@ -32,14 +35,21 @@ class ControlsHandler(HarmonyClientModuleBase):
 
     def activate(self):
         # Setup Keyboard listener
-        self.listener = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)
+        self.listener = keyboard.Listener(
+            on_press=self.on_press,
+            on_release=self.on_release
+        )
         self.listener.start()
 
 
     def deactivate(self):
         # Stop recording if active
         if self.entity_controller.sttModule and self.entity_controller.sttModule.is_recording_microphone:
-            self.toggle_record_microphone()
+            # Use run_coroutine_threadsafe to submit coroutine to the event loop
+            asyncio.run_coroutine_threadsafe(
+                self.toggle_record_microphone(),
+                self.loop
+            )
 
         # Stop the keyboard listener
         if self.listener:
@@ -49,18 +59,18 @@ class ControlsHandler(HarmonyClientModuleBase):
         # Disable base controller
         HarmonyClientModuleBase.deactivate(self)
 
-    def toggle_record_microphone(self):
+    async def toggle_record_microphone(self):
         if not self.entity_controller.sttModule:
             return
 
         if self.entity_controller.sttModule.is_recording_microphone:
-            recording_aborted = self.entity_controller.sttModule.stop_listen()
+            recording_aborted = await self.entity_controller.sttModule.stop_listen()
             if not recording_aborted:
                 logging.error('Harmony Link Plugin for VNGE: Failed to record from microphone.')
                 return
 
         else:
-            recording_started = self.entity_controller.sttModule.start_listen()
+            recording_started = await self.entity_controller.sttModule.start_listen()
             if not recording_started:
                 logging.error('Harmony Link Plugin for VNGE: Failed to record from microphone.')
                 return
@@ -70,7 +80,11 @@ class ControlsHandler(HarmonyClientModuleBase):
             if key.char.upper() == self.keymap_config["toggle_microphone"].upper():
                 if not self.is_key_pressed:
                     self.is_key_pressed = True
-                    self.toggle_record_microphone()
+                    # Use run_coroutine_threadsafe to submit coroutine to the event loop
+                    asyncio.run_coroutine_threadsafe(
+                        self.toggle_record_microphone(),
+                        self.loop
+                    )
         except AttributeError:
             pass  # Handle special keys that do not have 'char' attribute
 

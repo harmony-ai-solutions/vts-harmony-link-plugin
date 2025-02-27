@@ -15,7 +15,7 @@ class PerceptionHandler(HarmonyClientModuleBase):
         # Set config
         self.config = perception_config
 
-    def handle_event(
+    async def handle_event(
             self,
             event  # HarmonyLinkEvent
     ):

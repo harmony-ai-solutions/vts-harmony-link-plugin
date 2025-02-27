@@ -36,7 +36,7 @@ class TTSProcessorThread(Thread):
                 continue
             self.running = False
 
-    def wait_voice_played(self):
+    async def wait_voice_played(self):
         if not self.tts_handler.playing_stream:
             logging.error('[{0}]: Tried to monitor an undefined playback stream!')
             return True
@@ -54,7 +54,7 @@ class TTSProcessorThread(Thread):
                 status=EVENT_STATE_NEW,
                 payload=self.tts_handler.playing_utterance['audio_file']
             )
-            self.tts_handler.backend_connector.send_event(playback_done_event)
+            await self.tts_handler.backend_connector.send_event(playback_done_event)
             self.tts_handler.playing_stream.close()
             self.tts_handler.fake_lipsync_stop()
             # Recursive call to PlayVoice in case we have pending audios for this AI Entity
@@ -112,7 +112,7 @@ class TextToSpeechHandler(HarmonyClientModuleBase):
                   "If you still have this error try every device that starts with 'CABLE Input'. If it doesn't help please create GitHub issue.")
             raise
 
-    def handle_event(
+    async def handle_event(
             self,
             event  # HarmonyLinkEvent
     ):
@@ -140,7 +140,7 @@ class TextToSpeechHandler(HarmonyClientModuleBase):
                         status=EVENT_STATE_NEW,
                         payload=audio_file
                     )
-                    self.backend_connector.send_event(playback_done_event)
+                    await self.backend_connector.send_event(playback_done_event)
                     return
 
                 # Build Sound source and queue it for playing

@@ -9,8 +9,6 @@ import asyncio
 import configparser
 import logging
 import os
-import threading
-import time
 
 import harmony_globals
 from VTSController import VTSController
@@ -21,7 +19,7 @@ from harmony_modules.common import EVENT_TYPE_INIT_ENTITY
 # Config
 _config = None
 
-_syncLock = threading.Lock()
+_syncLock = asyncio.Lock()
 
 
 # EntityInitHandler
@@ -29,32 +27,28 @@ class EntityInitHandler(common.HarmonyClientModuleBase):
     global _syncLock
 
     def __init__(self, entity_controller, entity_id):
-        # execute the base constructor
-        common.HarmonyClientModuleBase.__init__(self, entity_controller=entity_controller)
-        # Set config
+        super().__init__(entity_controller=entity_controller)
         self.entity_id = entity_id
 
-    def handle_event(
+    async def handle_event(
             self,
-            event  # HarmonyLinkEvent
+            event# HarmonyLinkEvent
     ):
         # Wait for Events required for initialization
         if event.event_type == EVENT_TYPE_INIT_ENTITY:
             # Acquire lock to avoid concurrency issues
-            _syncLock.acquire()
-            if event.status == common.EVENT_STATE_DONE:
-                harmony_globals.ready_entities.append(self.entity_id)
-            else:
-                harmony_globals.failed_entities.append(self.entity_id)
+            async with _syncLock:
+                if event.status == common.EVENT_STATE_DONE:
+                    harmony_globals.ready_entities.append(self.entity_id)
+                else:
+                    harmony_globals.failed_entities.append(self.entity_id)
 
-            # Check for init done condition
-            self.check_init_done()
-            # Release lock
-            _syncLock.release()
-            # Disable this handler, it is not needed anymore after init
-            self.deactivate()
+                # Check for init done condition
+                await self.check_init_done()
+                # Disable this handler, it is not needed anymore after init
+                self.deactivate()
 
-    def check_init_done(self):
+    async def check_init_done(self):
         logging.debug("Ready entities: {}".format(len(harmony_globals.ready_entities)))
         logging.debug("Failed entities: {}".format(len(harmony_globals.failed_entities)))
         logging.debug("Active entities: {}".format(len(harmony_globals.active_entities)))
@@ -62,22 +56,21 @@ class EntityInitHandler(common.HarmonyClientModuleBase):
         if len(harmony_globals.ready_entities) + len(harmony_globals.failed_entities) == len(harmony_globals.active_entities):
             if len(harmony_globals.failed_entities) == 0:
                 # Entity Initialization done - start VTS routines
-                asyncio.create_task(post_init())
+                await post_init()
             else:
                 _error_abort('Harmony Link: Entity Initialization failed.')
 
 
 # Chara - Internal representation for a chara actor
 class Chara:
-    def __init__(self, controller : VTSController):
+    def __init__(self, controller: VTSController):
         self.controller = controller
 
 
 class EntityController:
-
     def __init__(self, entity_id, config):
         # Flow Control
-        self.is_active = False
+        self.active = False
         # Important reference
         self.entity_id = entity_id
         self.config = config
@@ -94,13 +87,13 @@ class EntityController:
         self.perceptionModule = None
         self.controlsModule = None
 
-    def activate(self):
-        if self.is_active:
+    async def activate(self):
+        if self.active:
             return
 
         # Set active
         logging.debug('Starting EntityController for entity \'{0}\'...'.format(self.entity_id))
-        self.is_active = True
+        self.active = True
 
         # Initialize Character on Harmony Link
         init_event = common.HarmonyLinkEvent(
@@ -111,18 +104,14 @@ class EntityController:
                 'entity_id': self.entity_id
             }
         )
-        init_send_success = self.connector.send_event(init_event)
+        init_send_success = await self.connector.send_event(init_event)
         if init_send_success:
             logging.debug('Harmony Link: Initializing entity \'{0}\'...'.format(self.entity_id))
         else:
-            raise RuntimeError('Harmony Link: Failed to sent entity initialize Event for entity \'{0}\'.'.format(self.entity_id))
+            raise RuntimeError('Harmony Link: Failed to send entity initialize Event for entity \'{0}\'.'.format(self.entity_id))
 
-    def is_active(self):
-        return self.is_active
-
-    # _init_modules initializes all the interfaces and handlers needed by harmony_modules
-    def init_modules(self):
-
+    # init_modules initializes all the interfaces and handlers needed by harmony_modules
+    async def init_modules(self):
         # Init comms module for interfacing with external helper binaries
         self.connector = connector.ConnectorEventHandler(
             ws_endpoint=self.config.get('Connector', 'ws_endpoint'),
@@ -178,8 +167,6 @@ class EntityController:
             controls_keymap_config=dict(self.config.items('Controls.Keymap'))
         )
 
-        return None
-
     def create_startup_handler(self):
         self.initHandler = EntityInitHandler(
             entity_controller=self,
@@ -203,11 +190,10 @@ class EntityController:
         # self.countenanceModule.deactivate()
         # self.movementModule.deactivate()
         self.controlsModule.deactivate()
-
         self.connector.stop()
 
 
-def start_harmony_ai():
+async def start_harmony_ai():
     global _config
 
     # Read Config data from .ini file
@@ -233,7 +219,7 @@ def start_harmony_ai():
     user_entity_id = scene_config["user_entity_id"].strip()
     controller = EntityController(entity_id=user_entity_id, config=_config)
     # Initialize Client modules
-    controller.init_modules()
+    await controller.init_modules()
     # Create Startup Init handler
     controller.create_startup_handler()
     # Add to character list
@@ -247,7 +233,7 @@ def start_harmony_ai():
         entity_id = entity_id.strip()
         controller = EntityController(entity_id=entity_id, config=_config)
         # Initialize Client modules
-        controller.init_modules()
+        await controller.init_modules()
         # Create Startup Init handler
         controller.create_startup_handler()
         # Add to character list
@@ -255,12 +241,12 @@ def start_harmony_ai():
 
     # Warmup time to allow for the backend threads to connect to the websocket server
     warmup_time = int(_config.get('Harmony', 'start_warmup_time'))
-    time.sleep(warmup_time)
+    await asyncio.sleep(warmup_time)
 
     # Initialize Entities on Harmony Link
     for entity_id, controller in harmony_globals.active_entities.items():
         try:
-            controller.activate()
+            await controller.activate()
         except RuntimeError as e:
             _error_abort(f"Initialization on Harmony Link failed for entity '{entity_id}': {e}")
             return
@@ -302,7 +288,7 @@ async def post_init():
             status=common.EVENT_STATE_NEW,
             payload={}
         )
-        send_success = controller.connector.send_event(environment_loaded_event)
+        send_success = await controller.connector.send_event(environment_loaded_event)
         if send_success:
             logging.info('Harmony Link: Scene Data finished loading for entity "{0}"'.format(entity_id))
         else:
@@ -326,4 +312,3 @@ def shutdown():
     # Shutdown all Entities
     for controller in harmony_globals.active_entities.values():
         controller.shutdown_modules()
-

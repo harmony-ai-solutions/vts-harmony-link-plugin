@@ -4,10 +4,11 @@
 # This file contains all handling to be done with the Harmony Link STT Module
 #
 # Import Client base Module
-import logging
-
 from harmony_modules.common import *
+import harmony_globals
 
+import asyncio
+import logging
 import threading
 import base64
 import time
@@ -32,6 +33,8 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
         self.buffer_clip_duration = int(self.config['buffer_clip_duration'])
         self.record_stepping = int(self.config['record_stepping'])
         self.microphone_name = self.get_microphone()
+        # Event loop reference for synchronizing threads
+        self.loop = asyncio.get_event_loop()
         # Recording Handling
         self.is_recording_microphone = False
         self.active_recording_events = {}
@@ -46,7 +49,7 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
         # Calculate maximum buffer size in bytes
         self.max_buffer_bytes = self.bytes_per_second * self.buffer_clip_duration
 
-    def handle_event(
+    async def handle_event(
             self,
             event  # HarmonyLinkEvent
     ):
@@ -67,38 +70,38 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
                 )
 
                 # FIXME: This is not very performant, will cause issues with many characters
-                for entity_id, controller in self.entity_controller.game.scenedata.active_entities.items():
+                for entity_id, controller in harmony_globals.active_entities.items():
                     if entity_id == self.entity_controller.entity_id or controller.perceptionModule is None:
                         continue
-                    controller.perceptionModule.handle_event(event)
+                    await controller.perceptionModule.handle_event(event)
 
         # User / Source entity starts talking
         if event.event_type == EVENT_TYPE_STT_SPEECH_STARTED and event.status == EVENT_STATE_DONE:
             # This event is intended to perform as an "interruption event" for LLM and TTS
             # on the listening entities.
             # FIXME: This is not very performant, will cause issues with many characters
-            for entity_id, controller in self.entity_controller.game.scenedata.active_entities.items():
+            for entity_id, controller in harmony_globals.active_entities.items():
                 if entity_id == self.entity_controller.entity_id or controller.perceptionModule is None:
                     continue
                 #
                 event.payload = {
                     "entity_id": self.entity_controller.entity_id
                 }
-                controller.perceptionModule.handle_event(event)
+                await controller.perceptionModule.handle_event(event)
 
         # User / Source entity stops talking
         if event.event_type == EVENT_TYPE_STT_SPEECH_STOPPED and event.status == EVENT_STATE_DONE:
             # This event is intended to perform as an "interruption event" for LLM and TTS
             # on the listening entities.
             # FIXME: This is not very performant, will cause issues with many characters
-            for entity_id, controller in self.entity_controller.game.scenedata.active_entities.items():
+            for entity_id, controller in harmony_globals.active_entities.items():
                 if entity_id == self.entity_controller.entity_id or controller.perceptionModule is None:
                     continue
                 #
                 event.payload = {
                     "entity_id": self.entity_controller.entity_id
                 }
-                controller.perceptionModule.handle_event(event)
+                await controller.perceptionModule.handle_event(event)
 
         # Received event to start recording Audio through the Game's utilities
         if event.event_type == EVENT_TYPE_STT_FETCH_MICROPHONE and event.status == EVENT_STATE_DONE:
@@ -119,7 +122,7 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
             # Store event to mark it as processing
             self.active_recording_events[event.event_id] = event
 
-    def start_listen(self):
+    async def start_listen(self):
         if self.is_recording_microphone:
             return False
 
@@ -140,7 +143,7 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
                 "sample_rate": self.sample_rate
             }
         )
-        success = self.backend_connector.send_event(event)
+        success = await self.backend_connector.send_event(event)
         if success:
             logging.info('Harmony Link: listening...')
             self.is_recording_microphone = True
@@ -150,7 +153,7 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
             # Stop recording
             return False
 
-    def stop_listen(self):
+    async def stop_listen(self):
         if not self.is_recording_microphone:
             return False
 
@@ -161,7 +164,7 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
             status=EVENT_STATE_NEW,
             payload={}
         )
-        success = self.backend_connector.send_event(event)
+        success = await self.backend_connector.send_event(event)
         if success:
             logging.info('Harmony Link: listening stopped. Processing speech...')
 
@@ -220,7 +223,7 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
         def audio_stream_callback(indata, frames, time_info, status):
             if status:
                 logging.debug(f"recording callback status: {status}")
-            audio_data = indata.tobytes()
+            audio_data = bytes(indata)
             with self.lock:
                 self.recording_buffer.extend(audio_data)
                 # Remove oldest data if buffer exceeds max size
@@ -331,7 +334,7 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
         # print "First 20 bytes of audio_bytes:", audio_bytes[:20]
 
         # Encode to base64
-        encoded_data = base64.b64encode(audio_bytes)
+        encoded_data = base64.b64encode(audio_bytes).decode('utf-8')
 
         # DEBUG CODE
         # print "Length of encoded_data:", len(encoded_data)
@@ -349,7 +352,17 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
                 'sample_rate': self.sample_rate,
             }
         )
-        self.backend_connector.send_event(result_event)
+
+        # Submit the coroutine to send the event and ensure it could be sent
+        future = asyncio.run_coroutine_threadsafe(
+            self.backend_connector.send_event(result_event),
+            self.loop
+        )
+        try:
+            future.result()
+        except Exception as e:
+            logging.error(f"Failed to send event to Harmony Link: {e}")
+
         # Remove the event from the tracking
         del self.active_recording_events[event_id]
 
