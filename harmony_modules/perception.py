@@ -20,6 +20,17 @@ class PerceptionHandler(HarmonyClientModuleBase):
             event  # HarmonyLinkEvent
     ):
 
+        if event.event_type == EVENT_TYPE_PERCEPTION_ACTOR_UTTERANCE and event.status == EVENT_STATE_DONE:
+            # Forward it as explicit user utterance event to harmony link for this entity
+            event = HarmonyLinkEvent(
+                event_id='actor_{0}_VAD_utterance_processed'.format(self.entity_controller.entity_id),
+                event_type=EVENT_TYPE_USER_UTTERANCE,
+                status=EVENT_STATE_NEW,
+                payload=event.payload
+            )
+            await self.backend_connector.send_event(event)
+            return
+
         # Suppress Speech output for the current entity
         if event.event_type == EVENT_TYPE_STT_SPEECH_STARTED and event.status == EVENT_STATE_DONE:
             # event_entity_id = event.payload
