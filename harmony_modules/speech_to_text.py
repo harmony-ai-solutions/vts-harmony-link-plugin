@@ -32,7 +32,7 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
         self.sample_rate = int(self.config['sample_rate'])
         self.buffer_clip_duration = int(self.config['buffer_clip_duration'])
         self.record_stepping = int(self.config['record_stepping'])
-        self.microphone_name = self.get_microphone()
+        self.microphone_index, self.microphone_name = self.get_microphone()
         # Event loop reference for synchronizing threads
         self.loop = asyncio.get_event_loop()
         # Recording Handling
@@ -185,10 +185,11 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
         devices = sd.query_devices()
         input_devices = [device for device in devices if device['max_input_channels'] > 0]
         microphone_name = self.config['microphone']
+        microphone_index = -1
 
         if len(input_devices) <= 0:
             logging.warning('No microphone available.')
-            return None
+            return microphone_index, None
         else:
             microphones = ""
             for idx, device in enumerate(input_devices):
@@ -199,16 +200,18 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
             # Get the index of the default input device
             default_device_index = sd.default.device[0]
             # Retrieve the name of the default input device
+            microphone_index = default_device_index
             microphone_name = sd.query_devices(default_device_index)['name']
         else:
             matching_devices = [device for device in input_devices if microphone_name in device['name']]
             if matching_devices:
+                microphone_index = matching_devices[0]['index']
                 microphone_name = matching_devices[0]['name']
             else:
                 logging.warning('No microphone with provided name "{0}" available.'.format(microphone_name))
-                return None
+                return microphone_index, None
 
-        return microphone_name
+        return microphone_index, microphone_name
 
     def start_continuous_recording(self):
         # This starts a continuous microphone recording clip which will be used to fetch
@@ -250,7 +253,7 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
             self.audio_stream = sd.RawInputStream(
                 samplerate=self.sample_rate,
                 blocksize=int(self.sample_rate * self.record_stepping / 1000),
-                device=self.microphone_name,
+                device=self.microphone_index,
                 channels=self.channels,
                 dtype=dtype,
                 callback=audio_stream_callback

@@ -10,59 +10,11 @@ from harmony_modules.common import *
 import sounddevice as sd
 import soundfile as sf
 
+import asyncio
 import random
-import time
-from threading import Thread
 
 # Specify RNG lib here in case we need to replace it at some point
 rng = random.Random()
-
-
-class TTSProcessorThread(Thread):
-    def __init__(self, tts_handler, lipsync_interval=0.1):
-        # execute the base constructor
-        Thread.__init__(self)
-        # Control flow
-        self.running = False
-        # Params
-        self.tts_handler = tts_handler
-        self.lipsync_interval = lipsync_interval if lipsync_interval >= 0.1 else 0.1
-
-    def run(self):
-        self.running = True
-        while self.running:
-            if not self.wait_voice_played():
-                time.sleep(self.lipsync_interval)
-                continue
-            self.running = False
-
-    async def wait_voice_played(self):
-        if not self.tts_handler.playing_stream:
-            logging.error('[{0}]: Tried to monitor an undefined playback stream!')
-            return True
-
-        if self.tts_handler.playing_stream.is_active():
-            self.tts_handler.fake_lipsync_update()
-            return False
-        else:
-            # here the sound file is played, you can mark some flag or delete the file
-            logging.debug('[{0}]: Done playing file: {1}!'.format(self.tts_handler.__class__.__name__, self.tts_handler.playing_utterance['audio_file']))
-            # Send Message to Harmony Link to delete the source file from disk
-            playback_done_event = HarmonyLinkEvent(
-                event_id='playback_done',  # This is an arbitrary dummy ID to conform the Harmony Link API
-                event_type=EVENT_TYPE_TTS_PLAYBACK_DONE,
-                status=EVENT_STATE_NEW,
-                payload=self.tts_handler.playing_utterance['audio_file']
-            )
-            await self.tts_handler.backend_connector.send_event(playback_done_event)
-            self.tts_handler.playing_stream.close()
-            self.tts_handler.fake_lipsync_stop()
-            # Recursive call to PlayVoice in case we have pending audios for this AI Entity
-            self.tts_handler.playing_stream = None
-            self.tts_handler.playing_utterance = None
-            self.tts_handler.play_voice()
-            return True
-
 
 # TextToSpeechHandler - main module class
 class TextToSpeechHandler(HarmonyClientModuleBase):
@@ -73,11 +25,14 @@ class TextToSpeechHandler(HarmonyClientModuleBase):
         self.config = tts_config
         # Setup Audio Device
         self.setup_speaker()
+        # Event loop reference for synchronizing threads
+        self.loop = asyncio.get_event_loop()
         # TTS Handling
         self.speech_suppressed = False
         self.playing_utterance = None
         self.playing_stream = None
         self.pending_utterances = []
+        self.lipsync_interval = 0.1
 
     def setup_speaker(self):
         logging.debug('setting up speaker / audio output device')
@@ -156,17 +111,17 @@ class TextToSpeechHandler(HarmonyClientModuleBase):
                     sample_rate
                 ))
                 # Play
-                self.play_voice()
+                await self.play_voice()
 
             # TODO: Update chara to perform lipsync on play
 
         return
 
-    def play_voice(self):
+    async def play_voice(self):
         if self.playing_utterance is not None:
             return
 
-        if len(self.pending_utterances) > 0:
+        while len(self.pending_utterances) > 0:
             audio_file, audio_data, sample_rate = self.pending_utterances.pop(0)
 
             # Keep reference to the currently playing utterance
@@ -183,26 +138,58 @@ class TextToSpeechHandler(HarmonyClientModuleBase):
                 end = start + frames
                 if end > self.playing_utterance['length']:
                     end = self.playing_utterance['length']
-                    outdata[:end - start] = self.playing_utterance['audio_data'][start:end]
-                    outdata[end - start:] = 0
+
+                data_slice = self.playing_utterance['audio_data'][start:end]
+                # Reshape array in case audio data is mono
+                if data_slice.ndim == 1:
+                    data_slice = data_slice[:, None]
+
+                out_frames = len(data_slice)
+                outdata[:out_frames] = data_slice
+
+                if out_frames < frames:
+                    outdata[out_frames:] = 0
+                    self.loop.call_soon_threadsafe(self.playback_finished)
                     raise sd.CallbackStop()
-                else:
-                    outdata[:] = self.playing_utterance['audio_data'][start:end]
+
                 self.playing_utterance['index'] = end
 
-            if self.playing_utterance['audio_data'].ndim > 1:
-                channels = self.playing_utterance['audio_data'].shape[1]
-            else:
-                channels = 1
+            # Determine if Stereo or Mono Audio
+            channels = self.playing_utterance['audio_data'].shape[1] if self.playing_utterance['audio_data'].ndim > 1 else 1
 
+            # Play audio
             self.playing_stream = sd.OutputStream(
                 samplerate=self.playing_utterance['sample_rate'],
                 channels=channels,
                 callback=callback
-            ).start()
+            )
+            self.playing_stream.start()
+            logging.debug(f'[TextToSpeechHandler]: Playing audio file: {audio_file}')
+            # Wait until audio stream has been played completely or surpressed
+            await self.monitor_playback()
 
-            logging.debug('[{0}]: Playing audio file: {1}'.format(self.__class__.__name__, audio_file))
-            TTSProcessorThread(tts_handler=self).start()
+    async def monitor_playback(self):
+        while self.playing_stream and self.playing_stream.active:
+            asyncio.run_coroutine_threadsafe(self.fake_lipsync_update(), self.loop)
+            await asyncio.sleep(self.lipsync_interval)
+
+    def playback_finished(self):
+        logging.debug(f'[TextToSpeechHandler]: Done playing file: {self.playing_utterance["audio_file"]}')
+
+        # Send Playback done event to harmony link, so the audio file gets cleaned up.
+        playback_done_event = HarmonyLinkEvent(
+            event_id='playback_done',
+            event_type=EVENT_TYPE_TTS_PLAYBACK_DONE,
+            status=EVENT_STATE_NEW,
+            payload=self.playing_utterance['audio_file']
+        )
+        asyncio.create_task(self.backend_connector.send_event(playback_done_event))
+
+        # Cleanup
+        self.playing_stream.close()
+        asyncio.run_coroutine_threadsafe(self.fake_lipsync_stop(), self.loop)
+        self.playing_stream = None
+        self.playing_utterance = None
 
     def suppress_speech(self, suppress=False):
         # Update suppression mode
@@ -211,23 +198,26 @@ class TextToSpeechHandler(HarmonyClientModuleBase):
         if not self.speech_suppressed:
             return
 
-        if self.playing_utterance is None:
+        if self.playing_stream is None:
             return
 
-        self.playing_utterance.Stop()
-        self.playing_utterance.Cleanup()
+        # Stop the stream and cleanup
+        self.playing_stream.close()
+        asyncio.run_coroutine_threadsafe(self.fake_lipsync_stop(), self.loop)
+        self.playing_stream = None
         self.playing_utterance = None
         self.pending_utterances = []
-        self.fake_lipsync_stop()
 
-    def fake_lipsync_stop(self):
+    async def fake_lipsync_stop(self):
+        # logging.debug("[TextToSpeechHandler]: Fake Lipsync stopping")
         if self.chara is not None:
-            self.chara.actor.set_mouth_open(0)
+            await self.chara.controller.set_mouth_open(0)
 
-    def fake_lipsync_update(self):
+    async def fake_lipsync_update(self):
+        # logging.debug("[TextToSpeechHandler]: Fake Lipsync updating")
         if self.chara is not None:
             mo = rng.random()
             if mo > 0.7:
-                self.chara.actor.set_mouth_open(1.0)
+                await self.chara.controller.set_mouth_open(1.0)
             else:
-                self.chara.actor.set_mouth_open(mo)
+                await self.chara.controller.set_mouth_open(mo)
