@@ -19,8 +19,14 @@ async def main() -> None:
     await start_harmony_ai()
 
     # Continuous event loop so the application won't shut down
-    await asyncio.Event().wait()
+    try:
+        await asyncio.Event().wait()
+    except asyncio.CancelledError:
+        logging.info('Main coroutine cancelled, shutting down')
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logging.info('Program interrupted by user')

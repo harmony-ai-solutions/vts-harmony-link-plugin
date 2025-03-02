@@ -169,7 +169,7 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
             logging.info('Harmony Link: listening stopped. Processing speech...')
 
             # Stop recording to ongoing audio clip
-            if not self.stop_continuous_recording():
+            if not await self.stop_continuous_recording():
                 logging.error('failed to stop continous recording')
                 return False
 
@@ -266,7 +266,7 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
             logging.error('Failed to start continuous recording: {}'.format(e))
             return False
 
-    def stop_continuous_recording(self):
+    async def stop_continuous_recording(self):
         if self.audio_stream is None:
             return False
 
@@ -277,7 +277,7 @@ class SpeechToTextHandler(HarmonyClientModuleBase):
                 logging.debug('Waiting for recording events to finish...')
             if timeout_counter < 100:
                 timeout_counter += 1
-                time.sleep(0.1)
+                await asyncio.sleep(0.1)
             else:
                 logging.warning('Recording events did not finish within timeout of 10 seconds')
                 break  # Proceed to stop recording anyway

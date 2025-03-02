@@ -41,11 +41,18 @@ class ConnectorEventHandler:
 
     async def run(self):
         try:
-            async with websockets.connect(self.ws_endpoint) as websocket:
+            async with websockets.connect(self.ws_endpoint, close_timeout=1) as websocket:
                 self.websocket = websocket
                 consumer_task = asyncio.create_task(self.consumer_handler())
                 producer_task = asyncio.create_task(self.producer_handler())
                 await asyncio.gather(consumer_task, producer_task)
+        except asyncio.CancelledError:
+            logging.info('ConnectorEventHandler run() cancelled')
+            # Cancel sub-tasks
+            consumer_task.cancel()
+            producer_task.cancel()
+            await asyncio.gather(consumer_task, producer_task, return_exceptions=True)
+            raise  # Propagate the cancellation
         except Exception as e:
             logging.error(f'WebSocket connection failed: {e}')
             self.shutdown_func()
@@ -55,6 +62,9 @@ class ConnectorEventHandler:
             async for message in self.websocket:
                 # TODO: Check if this should be creating a task instead for better performance
                 await self.process_event_message(message)
+        except asyncio.CancelledError:
+            logging.info('consumer_handler cancelled')
+            raise
         except Exception as e:
             logging.error(f'Error in consumer_handler: {e}')
             self.shutdown_func()
@@ -70,6 +80,9 @@ class ConnectorEventHandler:
                 except Exception as e:
                     future.set_exception(e)
                     logging.error(f"Failed to send event: {e}")
+        except asyncio.CancelledError:
+            logging.info('consumer_handler cancelled')
+            raise
         except Exception as e:
             logging.error(f'Error in producer_handler: {e}')
             self.shutdown_func()
