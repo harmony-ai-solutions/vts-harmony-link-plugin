@@ -36,35 +36,46 @@ class TextToSpeechHandler(HarmonyClientModuleBase):
 
     def setup_speaker(self):
         logging.debug('setting up speaker / audio output device')
+        # Determine speaker to use
         available_devices = sd.query_devices()
-        logging.debug(f"available devices:\n {available_devices}")
+        output_devices = [device for device in available_devices if device['max_output_channels'] > 0]
+        speaker_name = self.config['speaker']
+        speaker_index = None
 
-        if len(available_devices) == 0:
+        if len(output_devices) == 0:
             raise RuntimeError('No output devices found!')
 
+        # Log available output devices
+        devices_str = ""
+        for idx, device in enumerate(output_devices):
+            devices_str += f"{idx}: {device['name']}\n"
+        logging.debug(f"Available output devices:\n{devices_str}")
+
         try:
-            device_id = int(self.config['speaker_device_override'])
-            if device_id < 0:
-                # This searches for a device with text 'CABLE Input' in it's name, in case no override is specified
-                for idx, device in enumerate(available_devices):
-                    if 'CABLE Input' in device['name']:
-                        device_id = idx
-                        break
-                # If no cable input is found, just try to use random output
-                if device_id < 0:
-                    device_id = 0
-                    logging.warning(f"No audio output device with ID 'CABLE Input' in it's name found!"
-                                    f"Device '{available_devices[device_id].name}' was assigned automatically.'")
+            if speaker_name == 'default':
+                # Get the index of the default output device
+                default_output_index = sd.default.device[1]  # Output device is at index 1
+                if default_output_index is None:
+                    logging.error('No default output device found.')
+                    raise RuntimeError('No default output device found.')
+                speaker_index = default_output_index
+                speaker_name = sd.query_devices(default_output_index)['name']
+            else:
+                matching_devices = [device for device in output_devices if speaker_name in device['name']]
+                if matching_devices:
+                    speaker_index = matching_devices[0]['index']
+                    speaker_name = matching_devices[0]['name']
+                else:
+                    logging.warning(f'No speaker with name containing "{speaker_name}" found.')
+                    raise RuntimeError(f'No speaker with name containing "{speaker_name}" found.')
 
             # Setup Output device in lib
-            sd.check_output_settings(device_id)
+            sd.check_output_settings(device=speaker_index)
             sd.default.samplerate = 44100
-            sd.default.device = device_id
-        except sd.PortAudioError:
-            logging.error("Invalid output device! Make sure you've launched VB-Cable.\n",
-                  "Check that you've choosed the correct output_device in initialize method.\n",
-                  "From the list below, select device that starts with 'CABLE Input' and set output_device to it's id in list.\n",
-                  "If you still have this error try every device that starts with 'CABLE Input'. If it doesn't help please create GitHub issue.")
+            sd.default.device = (sd.default.device[0], speaker_index)
+            logging.debug(f'Speaker set to "{speaker_name}" with index {speaker_index}.')
+        except Exception as e:
+            logging.error(f"Failed to set up speaker: {e}")
             raise
 
     async def handle_event(
