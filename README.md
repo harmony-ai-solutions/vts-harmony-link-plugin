@@ -15,6 +15,9 @@ It's a Fork of [JarikDem-Bot/ai-waifu](https://github.com/JarikDem-Bot/ai-waifu)
 This project is meant to create an engaging experience combining the charm of anime characters brought to life with cutting-edge technologies.
 It allows you to interact with desired character in real-time without powerful hardware.
 
+By forking and adapting the initial repo to work with our Harmony Link Middleware, we allow for fully local setup without cloud services,
+as well as participating in newest developments in AI Technology for creating realistic AI Characters.
+
 ## Features
 
 - 🎤 **Voice Interaction:** Speak to your AI character and get instant (almost) responses.
@@ -51,7 +54,7 @@ TODO
 Local Models used (via Harmony Speech Engine):
 - Faster-Whipser-Tiny for VAD (General Speech detection)
 - Distil-Whisper-EN-Medium (Detailed Transcription if Speech Detected)
-- Harmony Speech V1
+- Harmony Speech V1 (TTS)
 
 Cloud Services used:
 - Kindroid AI
@@ -75,7 +78,8 @@ To run this project, you need:
       - Once you start the Plugin later, allow the connection:
         ![Allow Plugin Connection](docs/images/vts-allow-plugin.PNG)
     </details>
-8. Run the project by executing `python main.py` in the project directory.
+8. Start Harmony Link (if it's not running already) and local services AI (as needed).
+9. Run the project by executing `python main.py` in the project directory.
 
 ## License
 
