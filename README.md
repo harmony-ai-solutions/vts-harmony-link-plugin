@@ -1,119 +1,118 @@
-<h1 align="center"> AI Waifu (VTuber) </h1>
+<h1 align="center"> Project Harmony.AI - VTube Studio Plugin </h1>
 
 <div align="center">
   
-<a href="/LICENSE">![GitHub](https://img.shields.io/github/license/JarikDem-Bot/ai-waifu-test)</a>
-<a href="">![GitHub top language](https://img.shields.io/github/languages/top/JarikDem-Bot/ai-waifu-test)</a>
-<a href="">![Static Badge](https://img.shields.io/badge/Anime%20-%20AI%20waifu%20-%20lightpink)</a>
+<a href="/LICENSE">![GitHub](https://img.shields.io/github/license/harmony-ai-solutions/vts-harmony-link-plugin)</a>
+<a href="">![GitHub top language](https://img.shields.io/github/languages/top/harmony-ai-solutions/vts-harmony-link-plugin)</a>
+<a href="">![Static Badge](https://img.shields.io/badge/VTS%20-%20Plugin%20-%20orange)</a>
 
 </div>
 
-**Anime AI Waifu** is an AI powered voice assistant with VTuber's model, that combines the charm of anime characters with cutting-edge technologies. This project is meant to create an engaging experience where you can interact with desired character in real-time without powerful hardware.
+**Harmony.AI VTube Studio Plugin** is an AI powered voice assistant capable of controlling a VTuber model
+in VTube Studio, in combination with Harmony.AI's [Harmony Link AI Middleware](https://project-harmony.ai/technology/). 
+It's a Fork of [JarikDem-Bot/ai-waifu](https://github.com/JarikDem-Bot/ai-waifu).
 
+This project is meant to create an engaging experience combining the charm of anime characters brought to life with cutting-edge technologies.
+It allows you to interact with desired character in real-time without powerful hardware.
 
 ## Features
 
-- 🎤 **Voice Interaction:** Speak to your AI waifu and get instant (almost) responses.
-    - Whisper - openai's paid speech recognition.
-    - Google sr - free speech recognition alternative.
-    - Console - if you don't want use microphone just type prompts with your keyboard.
+- 🎤 **Voice Interaction:** Speak to your AI character and get instant (almost) responses.
+    - OpenAI Whisper is supported locally through [Harmony Speech Engine](https://github.com/harmony-ai-solutions/harmony-speech-engine)
+    - Or using OpenAIs Cloud API.
+    - Other Services for better Latency and Comprehension by the AI will be added to Harmony Speech Engine soon.
 
 - 🤖 **AI Chatbot Integration:** Conversations are powered by an AI chatbot, ensuring engaging and dynamic interactions.
-    - Openai's *'gpt-3.5-turbo'* or any other available model.
-    - File with personality and behaviour description.
-    - Remembers previous messages.
+    - OpenAI's *'gpt-3.5-turbo'* or any other available model.
+    - Kajiwoto AI Characters (https://kajiwoto.ai/)
+    - Kindroids (https://kindroid.ai/)
+    - Local LLMs using Text-Generation-Webui    
 
-- 📢 **Text-to-Speech:** Hear your AI waifu's responses as she speaks back to you, creating an immersive experience.
-    - Google tts - free and simple solution.
-    - ElevenLabs - amazing results, tons of voices.
-    - Console - get text responses in your console (but VTube model will be just idle).
+- 📢 **Text-to-Speech:** Hear your AI character's responses as it speaks back to you, creating an immersive experience.
+    - ElevenLabs - amazing results, tons of voices (https://elevenlabs.io/).
+    - Multiple Local Speech Models availiable using [Harmony Speech Engine](https://github.com/harmony-ai-solutions/harmony-speech-engine). 
 
-- 🌐 **Integration with VTube Studio:** Seamlessly connect your AI waifu to VTube Studio for an even more lifelike and visually engaging interaction.
+- 🌐 **Integration with VTube Studio:** Seamlessly connect your AI character to VTube Studio for an even more lifelike and visually engaging interaction.
     - Lipsync while talking.
+    - Soon: Face Expressions and Movement (If the model supports it)
 
 
 ## Showcase
-
+TODO
 [![Video demonstration](https://i.ibb.co/zm42TCq/2023-08-23-104833.png)](https://youtu.be/e8sF09jf_DA)
 
-*Demonstration in real time without cutouts or speed up. This is real delay in answers.
+*Demonstration in real time without cutouts or speed up. Running on the following Hardware:
+
+- Dell XPS 15 9570
+- Intel i7-8750H
+- 16 GB RAM
+- Nvidia GTX 1050 Ti MaxQ (4 GB VRAM)
+
+Local Models used (via Harmony Speech Engine):
+- Faster-Whipser-Tiny for VAD (General Speech detection)
+- Distil-Whisper-EN-Medium (Detailed Transcription if Speech Detected)
+- Harmony Speech V1
+
+Cloud Services used:
+- Kindroid AI
 
 ## Installation
 
 To run this project, you need:
- 1. Install Python 3.12 if you don't already have it installed.
- 2. Clone the repository by running `git clone https://github.com/JarikDem-Bot/ai-waifu.git`
- 3. Install the required Python packages by running `pip install -r requirements.txt` in the project directory.
- 4. Create `.env` file inside the project directory and enter your API keys
-    <details>
-      <summary> .env template</summary>
-      
-      ```shell
-      OPENAI_API_KEY='YOUR_OPEN_AI_KEY'
-      ELEVENLABS_API_KEY='YOUR_ELEVENLABS_KEY'
-      ```
-    </details>
-    
- 5. Install [VB-Cable](https://vb-audio.com/Cable/)
- 7. Install and set [VTube Studio](https://store.steampowered.com/app/1325860/VTube_Studio/)
+1. Install [Git CLI](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git) and [Python 3.12](https://www.python.org/downloads/) if you don't already have it installed. 
+2. Download [Harmony Link](https://project-harmony.ai/technology/) or set it up using Docker via [Quickstart Repository](https://github.com/harmony-ai-solutions/quickstart).
+3. Clone the repository by running `git clone https://github.com/harmony-ai-solutions/vts-harmony-link-plugin.git`
+4. (Optional: Consider installing a Python Package Manager like [miniconda](https://docs.anaconda.com/miniconda/) and create an environment for running this plugin). 
+5. Install the required Python packages by running `pip install -r requirements.txt` via command line inside the cloned project's directory. 
+6. Check harmony.ini whether all Settings are fine. Usually you don't need to make any changes if you have a default Microphone and Speaker defined. 
+7. Install and set up [VTube Studio](https://store.steampowered.com/app/1325860/VTube_Studio/)
     <details>
       <summary>Settings: </summary>
       
-      - Select `CABLE Output` as microphone. Select `Preview microphone audio` to hear waifu's answers
-
-        <img src='https://github.com/JarikDem-Bot/ai-waifu/assets/73791422/a38f8b45-44f3-4b4d-9626-2f3c812b8ba2' width='50%'>
-        
-      - Select input and output for `Mouth Open`. Optionally you can set "breathing" to get idle movents.
-
-        <img src='https://github.com/JarikDem-Bot/ai-waifu/assets/73791422/4e7341b1-91a8-48f9-94e4-b5669163c89b' width='50%'>
-
+      - Tick the Checkbox to `Start API (allow plugins)`:
+        ![Enable API in VTS](docs/images/vts-api-enable.PNG)
+   
+      - Once you start the Plugin later, allow the connection:
+        ![Allow Plugin Connection](docs/images/vts-allow-plugin.PNG)
     </details>
-
-
- 9. Select your required settings in `main.py` in `waifu.initialize`
-     <details>
-      <summary>Arguments: </summary>
-      
-      - `user_input_service` (str) - the way to interact with Waifu
-          - `"whisper"` - OpenAI's whisper speech to text service; paid, requires OpanAi API key.
-          - `"google"` - free google speech to text service.
-          - `"console"` - type your promt in console with text (absoulutely free).
-          - `None` or unspecified - default value is `"whisper"`.
-      - `stt_duration` (float) - the maximum number of seconds that it will dynamically adjust the threshold for before returning. This value should be at least 0.5 in order to get a representative sample of the ambient noise. Default value is `0.5`.
-      - `mic_index` (int) - index of the device to use for audio input. If `None` or unspecified will use default microphone.
-
-      - `chatbot_service` (str) - service that will generate responses
-          - `"openai"` - OpenAI text generation servise; paid, requires OpanAi API key.
-          - `"test"` - returns prewritten message; used as dummy text for developement to reduce time and cost of testings.
-          - `None` or unspecified - default value is `"openai"`.
-      - `chatbot_model` (str) - model used for text generation. List of available models you can find [here](https://platform.openai.com/docs/models/overview). Default value is `"gpt-3.5-turbo"`.
-      - `chatbot_temperature` (float) - determines creativity of the generated text. A higher value leads to more creative result. A lower value leads to less creative and more similar results. Default value is `0.5`.
-      - `personality_file` (str) - relative path to txt file with waifu's description. Default value is `"personality.txt"`.
-        
-      - `tts_service` (str) - service that "reads" Waifu's responses
-          - `"google"` - free Google's tts, voice feels very "robotic".
-          - `"elevenlabs"` - ElevenLabs tts with good quality; paid, requires ElevenLabs API key.
-          - `"console"` - output will be printed in console (free).
-          - `None` or unspecified - default value is `"google"`.
-      - `output_device` - (int) output device ID or (str) output device name substring. If VB-Cable is used, you need to find device, that will start with `CABLE Input (VB-Audio Virtual` using `sd.query_devices()` command. 
-      - `tts_voice` (str) - ElevenLabs voice name. Default value is `"Elli"`.
-      - `tts_model` (str) - ElevenLabs model. Recommended values are `"eleven_monolingual_v1"` and `"eleven_multilingual_v1"`. Default value is `"eleven_monolingual_v1"`.
-
-    </details>
-
-    
- 10. Run the project by executing `python main.py` in the project directory.
-
-<br>
-
-> <picture>
->   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/Mqxx/GitHub-Markdown/main/blockquotes/badge/light-theme/warning.svg">
->   <img alt="Warning" src="https://raw.githubusercontent.com/Mqxx/GitHub-Markdown/main/blockquotes/badge/dark-theme/warning.svg">
-> </picture><br>
->
-> Depending on the selected input mode, program may send all recorded sounds or other data to the 3-rd parties such as: Google (stt, tts), OpenAI (stt, text generation), ElevenLabs (tts).
-
+8. Run the project by executing `python main.py` in the project directory.
 
 ## License
 
-[MIT](/LICENSE)
+[Apache 2.0](/LICENSE)
+
+
+---
+
+## About Project Harmony.AI
+![Project Harmony.AI](docs/images/Harmony-Main-Banner-200px.png)
+### Our goal: Elevating Human <-to-> AI Interaction beyond known boundaries.
+Project Harmony.AI emerged from the idea to allow for a seamless living together between AI-driven characters and humans.
+Since it became obvious that a lot of technologies required for achieving this goal are not existing or still very experimental,
+the long term vision of Project Harmony is to establish the full set of technologies which help minimizing biological and
+technological barriers in Human <-to-> AI Interaction.
+
+### Our principles: Fair use and accessibility
+We want to counter today's tendencies of AI development centralization at the hands of big
+corporations. We're pushing towards maximum transparency in our own development efforts, and aim for our software to be
+accessible and usable in the most democratic ways possible.
+
+Therefore, for all our current and future software offerings, we'll perform a constant and well-educated evaluation whether
+we can safely open source them in parts or even completely, as long as this appears to be non-harmful towards achieving
+the project's main goal.
+
+### How to reach out to us
+
+[Official Website of Project Harmony.AI](https://project-harmony.ai/)
+
+#### If you want to collaborate or support this Project financially:
+
+Feel free to join our Discord Server and / or subscribe to our Patreon - Even $1 helps us drive this project forward.
+
+![Harmony.AI Discord Server](docs/images/discord32.png) [Harmony.AI Discord Server](https://discord.gg/f6RQyhNPX8)
+
+![Harmony.AI Discord Server](docs/images/patreon32.png) [Harmony.AI Patreon](https://patreon.com/harmony_ai)
+
+#### If you want to use our software commercially or discuss a business or development partnership:
+
+Contact us directly via: [contact@project-harmony.ai](mailto:contact@project-harmony.ai)
