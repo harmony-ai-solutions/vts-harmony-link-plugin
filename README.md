@@ -54,7 +54,7 @@ TODO
 Local Models used (via Harmony Speech Engine):
 - Faster-Whipser-Tiny for VAD (General Speech detection)
 - Distil-Whisper-EN-Medium (Detailed Transcription if Speech Detected)
-- Harmony Speech V1 (TTS)
+- OpenVoice V2 (TTS)
 
 Cloud Services used:
 - Kindroid AI
@@ -62,13 +62,9 @@ Cloud Services used:
 ## Installation
 
 To run this project, you need:
-1. Install [Git CLI](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git) and [Python 3.12](https://www.python.org/downloads/) if you don't already have it installed. 
-2. Download [Harmony Link](https://project-harmony.ai/technology/) or set it up using Docker via [Quickstart Repository](https://github.com/harmony-ai-solutions/quickstart).
-3. Clone the repository by running `git clone https://github.com/harmony-ai-solutions/vts-harmony-link-plugin.git`
-4. (Optional: Consider installing a Python Package Manager like [miniconda](https://docs.anaconda.com/miniconda/) and create an environment for running this plugin). 
-5. Install the required Python packages by running `pip install -r requirements.txt` via command line inside the cloned project's directory. 
-6. Check harmony.ini whether all Settings are fine. Usually you don't need to make any changes if you have a default Microphone and Speaker defined. 
-7. Install and set up [VTube Studio](https://store.steampowered.com/app/1325860/VTube_Studio/)
+1. Download [Harmony Link](https://project-harmony.ai/technology/) or set it up using Docker via [Quickstart Repository](https://github.com/harmony-ai-solutions/quickstart).
+2. Clone the repository by running `git clone https://github.com/harmony-ai-solutions/vts-harmony-link-plugin.git` or download the repository as a .zip file from Github and extract it. 
+3. Install and set up [VTube Studio](https://store.steampowered.com/app/1325860/VTube_Studio/)
     <details>
       <summary>Settings: </summary>
       
@@ -78,8 +74,10 @@ To run this project, you need:
       - Once you start the Plugin later, allow the connection:
         ![Allow Plugin Connection](docs/images/vts-allow-plugin.PNG)
     </details>
-8. Start Harmony Link (if it's not running already) and local services AI (as needed).
-9. Run the project by executing `python main.py` in the project directory.
+4. Check `harmony.ini` whether all Settings are fine. Usually you don't need to make any changes if you have a default Microphone and Speaker defined.
+5. Start Harmony Link (if it's not running already) and local services AI (as needed).
+6. Run the project by executing `run_windows.bat` or `run_linux.sh` in the project directory. This will download and launch Micromamba, install all python dependencies and launch the application.
+7. To enable / disable microphone recording, press `V`, or the key you defined in `harmony.ini` for the toggle.
 
 ## License
 

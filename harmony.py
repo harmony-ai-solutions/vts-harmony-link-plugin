@@ -208,12 +208,12 @@ async def start_harmony_ai():
     # Determine user entities to be controlled
     if "user_entity_id" not in scene_config or len(scene_config["user_entity_id"]) == 0:
         _error_abort('Harmony Plugin: User entity id is invalid.')
-        return
+        return False
 
     # Determine character entities to be controlled
     if "character_entity_id" not in scene_config or len(scene_config["character_entity_id"]) == 0:
         _error_abort('Harmony Plugin: Character entity id/list is invalid.')
-        return
+        return False
 
     # Setup user entity
     user_entity_id = scene_config["user_entity_id"].strip()
@@ -249,7 +249,10 @@ async def start_harmony_ai():
             await controller.activate()
         except RuntimeError as e:
             _error_abort(f"Initialization on Harmony Link failed for entity '{entity_id}': {e}")
-            return
+            return False
+
+    # Launched successfully
+    return True
 
 
 async def post_init():

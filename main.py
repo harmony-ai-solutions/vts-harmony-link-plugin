@@ -16,7 +16,11 @@ async def main() -> None:
     )
 
     # Init Harmony Link Plugin
-    await start_harmony_ai()
+    launch_success = await start_harmony_ai()
+    if not launch_success:
+        logging.info('Harmony Plugin failed to start. Shutting down.')
+        return
+    logging.info('Harmony Plugin started successfully. You can Toggle Speech Processing via Microphone now.')
 
     # Continuous event loop so the application won't shut down
     try:
