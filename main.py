@@ -1,25 +1,36 @@
-from waifu import Waifu
+import asyncio
+import logging
+import sys
+import time
 
-def main():
-    waifu = Waifu()
+from harmony import start_harmony_ai
 
-    waifu.initialize(user_input_service='whisper',
-                     stt_duration = None,
-                     mic_index = None,
+async def main() -> None:
+    # Setup logging
+    logging.Formatter.converter = time.gmtime
+    logging.basicConfig(
+        stream=sys.stdout,
+        level=logging.DEBUG,
+        format='[%(asctime)s] %(levelname)s: %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S %z'
+    )
 
-                    chatbot_service='openai',
-                    chatbot_model = None,
-                    chatbot_temperature = None,
-                    personality_file = None,
+    # Init Harmony Link Plugin
+    launch_success = await start_harmony_ai()
+    if not launch_success:
+        logging.info('Harmony Plugin failed to start. Shutting down.')
+        return
+    logging.info('Harmony Plugin started successfully. You can Toggle Speech Processing via Microphone now.')
 
-                    tts_service='elevenlabs', 
-                    output_device=8,
-                    tts_voice='Rebecca - wide emotional range',
-                    tts_model = None
-                    )
+    # Continuous event loop so the application won't shut down
+    try:
+        await asyncio.Event().wait()
+    except asyncio.CancelledError:
+        logging.info('Main coroutine cancelled, shutting down')
 
-    while True:
-        waifu.conversation_cycle()
 
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logging.info('Program interrupted by user')
