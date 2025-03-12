@@ -1,4 +1,5 @@
 <h1 align="center"> Project Harmony.AI - VTube Studio Plugin </h1>
+<div align="center">![Harmony AI VTS Plugin Logo](https://github.com/harmony-ai-solutions/vts-harmony-link-plugin/docs/images/vts-plugin.png)</div>
 
 <div align="center">
   
@@ -42,7 +43,6 @@ as well as participating in newest developments in AI Technology for creating re
 
 ## Showcase
 TODO
-[![Video demonstration](https://i.ibb.co/zm42TCq/2023-08-23-104833.png)](https://youtu.be/e8sF09jf_DA)
 
 *Demonstration in real time without cutouts or speed up. Running on the following Hardware:
 
