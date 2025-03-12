@@ -1,5 +1,5 @@
 <h1 align="center"> Project Harmony.AI - VTube Studio Plugin </h1>
-<div align="center">![Harmony AI VTS Plugin Logo](https://github.com/harmony-ai-solutions/vts-harmony-link-plugin/docs/images/vts-plugin.png)</div>
+<div align="center">![Harmony AI VTS Plugin Logo](https://github.com/harmony-ai-solutions/vts-harmony-link-plugin/blob/master/docs/images/vts-plugin.png)</div>
 
 <div align="center">
   
