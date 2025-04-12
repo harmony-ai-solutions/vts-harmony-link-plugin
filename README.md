@@ -65,6 +65,7 @@ Cloud Services used:
 
 ## Installation
 A quick tutorial is also availiable on YouTube (requires Harmony Link set up):
+
 [![Harmony AI + Vtube Studio - Quick 2 Minute Setup Tutorial - Project Harmony AI](https://img.youtube.com/vi/WHRxJ-EN3v4/0.jpg)](https://www.youtube.com/watch?v=WHRxJ-EN3v4)
 
 To run this project, you need:
