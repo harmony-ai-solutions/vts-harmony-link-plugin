@@ -64,6 +64,8 @@ Cloud Services used:
 - Kindroid AI
 
 ## Installation
+A quick tutorial is also availiable on YouTube (requires Harmony Link set up):
+[![Harmony AI + Vtube Studio - Quick 2 Minute Setup Tutorial - Project Harmony AI](https://img.youtube.com/vi/WHRxJ-EN3v4/0.jpg)](https://www.youtube.com/watch?v=WHRxJ-EN3v4)
 
 To run this project, you need:
 1. Download [Harmony Link](https://project-harmony.ai/technology/) or set it up using Docker via [Quickstart Repository](https://github.com/harmony-ai-solutions/quickstart).
